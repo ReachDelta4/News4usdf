@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from '../../lib/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -103,43 +104,65 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
     setView('editor');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingArticle) return;
-
     if (!editingArticle.title || !editingArticle.content) {
       toast.error('Please fill in title and content');
       return;
     }
-
-    // Auto-generate slug if empty
-    const slug = editingArticle.slug || editingArticle.title.toLowerCase().replace(/\s+/g, '-');
-
-    if (isCreating) {
-      const newArticle = {
-        ...editingArticle,
-        id: Date.now().toString(),
-        slug,
-      };
-      setArticles(prev => [...prev, newArticle]);
-      toast.success('Article created successfully');
-    } else {
-      setArticles(prev =>
-        prev.map(article =>
-          article.id === editingArticle.id ? { ...editingArticle, slug } : article
-        )
-      );
-      toast.success('Article updated successfully');
+    const slug = editingArticle.slug || editingArticle.title.toLowerCase().replace(/\\s+/g, '-');
+    const catId = categoriesByName.get((editingArticle.category || 'news').toLowerCase()) || null;
+    try {
+      if (isCreating) {
+        const created = await api.articles.create({
+          title: editingArticle.title,
+          slug,
+          summary: editingArticle.summary,
+          content: editingArticle.content,
+          category_id: catId as any,
+          status: editingArticle.status as any,
+          featured: editingArticle.featured,
+          featured_image_url: editingArticle.featuredImage as any,
+          publish_date: editingArticle.status === 'published' ? new Date().toISOString() : null,
+        } as any, editingArticle.tags || []);
+        setArticles(prev => [...prev, { ...editingArticle, id: String(created.id), slug }]);
+        toast.success('Article created successfully');
+      } else {
+        const idNum = parseInt(editingArticle.id, 10);
+        const updated = await api.articles.update(idNum, {
+          title: editingArticle.title,
+          slug,
+          summary: editingArticle.summary,
+          content: editingArticle.content,
+          category_id: catId as any,
+          status: editingArticle.status as any,
+          featured: editingArticle.featured,
+          featured_image_url: editingArticle.featuredImage as any,
+          publish_date: editingArticle.status === 'published' ? (editingArticle.publishDate ? new Date(editingArticle.publishDate).toISOString() : new Date().toISOString()) : null,
+        } as any, editingArticle.tags || []);
+        setArticles(prev => prev.map(a => a.id === editingArticle.id ? { ...editingArticle, slug } : a));
+        toast.success('Article updated successfully');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save article');
     }
-
     setView('list');
     setEditingArticle(null);
     setIsCreating(false);
   };
+      
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this article?')) {
-      setArticles(prev => prev.filter(article => article.id !== id));
-      toast.success('Article deleted successfully');
+      try {
+        await api.articles.delete(parseInt(id, 10));
+        setArticles(prev => prev.filter(article => article.id !== id));
+        toast.success('Article deleted successfully');
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to delete article');
+      }
     }
   };
 
@@ -185,12 +208,16 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
     toast.success('Featured articles reordered');
   };
 
-  const toggleFeatured = (id: string) => {
-    setArticles(prev =>
-      prev.map(article =>
-        article.id === id ? { ...article, featured: !article.featured } : article
-      )
-    );
+  const toggleFeatured = async (id: string) => {
+    const target = articles.find(a => a.id === id);
+    if (!target) return;
+    const next = !target.featured;
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, featured: next } : a));
+    try {
+      await api.articles.update(parseInt(id, 10), { featured: next } as any);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -583,3 +610,8 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
     </div>
   );
 }
+
+
+
+
+

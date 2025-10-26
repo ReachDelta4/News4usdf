@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from '../../lib/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -13,68 +14,44 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../ui/dialog';
-import { Plus, Edit, Trash2, GripVertical, Tag, Star } from 'lucide-react';
+import { Plus, Edit, Trash2, GripVertical, Star } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 interface Category {
-  id: string;
+  id: number;
   name: string;
   slug: string;
   description: string;
   color: string;
-  icon?: string;
   featured: boolean;
   articleCount: number;
   subcategories?: string[];
 }
 
 export function CategoryManager() {
-  const [categories, setCategories] = useState<Category[]>([
-    {
-      id: '1',
-      name: 'Politics',
-      slug: 'politics',
-      description: 'Political news and updates',
-      color: '#ef4444',
-      featured: true,
-      articleCount: 45,
-      subcategories: ['National', 'International', 'Elections']
-    },
-    {
-      id: '2',
-      name: 'Health',
-      slug: 'health',
-      description: 'Health and wellness news',
-      color: '#06b6d4',
-      featured: true,
-      articleCount: 32,
-      subcategories: ['Medicine', 'Fitness', 'Nutrition']
-    },
-    {
-      id: '3',
-      name: 'Sports',
-      slug: 'sports',
-      description: 'Sports news and scores',
-      color: '#10b981',
-      featured: true,
-      articleCount: 58,
-      subcategories: ['Football', 'Cricket', 'Basketball']
-    },
-    {
-      id: '4',
-      name: 'Entertainment',
-      slug: 'entertainment',
-      description: 'Entertainment and celebrity news',
-      color: '#8b5cf6',
-      featured: true,
-      articleCount: 41,
-      subcategories: ['Movies', 'Music', 'TV Shows']
-    },
-  ]);
-
+  const [categories, setCategories] = useState<Category[]>([]);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [draggedItem, setDraggedItem] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await api.categories.getAll();
+        setCategories((rows || []).map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-'),
+          description: r.description || '',
+          color: r.color || '#ef4444',
+          featured: !!r.featured,
+          articleCount: r.article_count || 0,
+        })));
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
 
   const handleDragStart = (index: number) => {
     setDraggedItem(index);
@@ -83,57 +60,86 @@ export function CategoryManager() {
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedItem === null || draggedItem === index) return;
-
     const newCategories = [...categories];
     const draggedCategory = newCategories[draggedItem];
     newCategories.splice(draggedItem, 1);
     newCategories.splice(index, 0, draggedCategory);
-    
     setCategories(newCategories);
     setDraggedItem(index);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
     setDraggedItem(null);
-    toast.success('Category order updated');
+    try {
+      const orders = categories.map((c, idx) => ({ id: c.id, display_order: idx }));
+      await api.categories.updateOrder(orders as any);
+      toast.success('Category order updated');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update order');
+    }
   };
 
-  const handleSaveCategory = () => {
+  const handleSaveCategory = async () => {
     if (!editingCategory) return;
-
-    if (editingCategory.id) {
-      setCategories(prev =>
-        prev.map(cat => cat.id === editingCategory.id ? editingCategory : cat)
-      );
-      toast.success('Category updated successfully');
-    } else {
-      const newCategory = {
-        ...editingCategory,
-        id: Date.now().toString(),
-        slug: editingCategory.name.toLowerCase().replace(/\s+/g, '-'),
-        articleCount: 0,
-      };
-      setCategories(prev => [...prev, newCategory]);
-      toast.success('Category created successfully');
+    try {
+      if (editingCategory.id) {
+        const updated = await api.categories.update(editingCategory.id, {
+          name: editingCategory.name,
+          description: editingCategory.description,
+          color: editingCategory.color,
+          featured: editingCategory.featured,
+          slug: editingCategory.slug || editingCategory.name.toLowerCase().replace(/\s+/g, '-'),
+        } as any);
+        setCategories(prev => prev.map(cat => cat.id === editingCategory.id ? { ...editingCategory, id: updated.id } : cat));
+        toast.success('Category updated successfully');
+      } else {
+        const created = await api.categories.create({
+          name: editingCategory.name,
+          description: editingCategory.description,
+          color: editingCategory.color,
+          featured: editingCategory.featured,
+          slug: editingCategory.name.toLowerCase().replace(/\s+/g, '-'),
+        } as any);
+        const newCategory: Category = {
+          id: created.id,
+          name: created.name,
+          slug: created.slug,
+          description: created.description || '',
+          color: created.color || '#ef4444',
+          featured: !!created.featured,
+          articleCount: created.article_count || 0,
+        };
+        setCategories(prev => [...prev, newCategory]);
+        toast.success('Category created successfully');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save category');
     }
-
     setIsDialogOpen(false);
     setEditingCategory(null);
   };
 
-  const handleDeleteCategory = (id: string) => {
+  const handleDeleteCategory = async (id: number) => {
     if (confirm('Are you sure you want to delete this category?')) {
-      setCategories(prev => prev.filter(cat => cat.id !== id));
-      toast.success('Category deleted successfully');
+      try {
+        await api.categories.delete(id);
+        setCategories(prev => prev.filter(cat => cat.id !== id));
+        toast.success('Category deleted successfully');
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to delete category');
+      }
     }
   };
 
-  const handleToggleFeatured = (id: string) => {
-    setCategories(prev =>
-      prev.map(cat =>
-        cat.id === id ? { ...cat, featured: !cat.featured } : cat
-      )
-    );
+  const handleToggleFeatured = async (id: number) => {
+    const target = categories.find(c => c.id === id);
+    if (!target) return;
+    const next = !target.featured;
+    setCategories(prev => prev.map(cat => cat.id === id ? { ...cat, featured: next } : cat));
+    try { await api.categories.update(id, { featured: next } as any); } catch (e) { console.error(e); }
   };
 
   return (
@@ -148,7 +154,7 @@ export function CategoryManager() {
             <Button
               onClick={() => {
                 setEditingCategory({
-                  id: '',
+                  id: 0,
                   name: '',
                   slug: '',
                   description: '',
@@ -166,7 +172,7 @@ export function CategoryManager() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
-                {editingCategory?.id ? 'Edit Category' : 'Add New Category'}
+                {editingCategory && editingCategory.id ? 'Edit Category' : 'Add New Category'}
               </DialogTitle>
             </DialogHeader>
             {editingCategory && (
@@ -220,18 +226,6 @@ export function CategoryManager() {
                     />
                   </div>
                 </div>
-                <div>
-                  <Label htmlFor="subcategories">Subcategories (comma separated)</Label>
-                  <Input
-                    id="subcategories"
-                    value={editingCategory.subcategories?.join(', ') || ''}
-                    onChange={(e) => setEditingCategory({
-                      ...editingCategory,
-                      subcategories: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-                    })}
-                    placeholder="Sub1, Sub2, Sub3"
-                  />
-                </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="featured">Featured in Header Navigation</Label>
                   <Switch
@@ -283,12 +277,10 @@ export function CategoryManager() {
                 className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-move"
               >
                 <GripVertical className="w-5 h-5 text-gray-400" />
-                
                 <div
                   className="w-4 h-4 rounded-full"
                   style={{ backgroundColor: category.color }}
                 />
-                
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-medium text-gray-900 dark:text-white">
@@ -301,17 +293,7 @@ export function CategoryManager() {
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     {category.description}
                   </p>
-                  {category.subcategories && category.subcategories.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {category.subcategories.map((sub, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {sub}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
                 </div>
-
                 <div className="flex items-center gap-4">
                   <div className="text-center">
                     <p className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -319,7 +301,6 @@ export function CategoryManager() {
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-300">Articles</p>
                   </div>
-
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
@@ -330,6 +311,13 @@ export function CategoryManager() {
                       }}
                     >
                       <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleToggleFeatured(category.id)}
+                    >
+                      {category.featured ? 'Unfeature' : 'Feature'}
                     </Button>
                     <Button
                       variant="ghost"
@@ -349,3 +337,4 @@ export function CategoryManager() {
     </div>
   );
 }
+

@@ -22,7 +22,7 @@ export const api = {
   articles: {
     async getAll(filters?: {
       status?: 'draft' | 'scheduled' | 'published';
-      category_id?: string;
+      category_id?: number;
       featured?: boolean;
       limit?: number;
       offset?: number;
@@ -32,15 +32,15 @@ export const api = {
         .select(`
           *,
           categories (id, name, slug, color),
-          profiles (id, name, email),
-          article_tags (tag)
+          users (id, name, email),
+          article_tags ( tags ( name ) )
         `)
         .order('created_at', { ascending: false });
 
       if (filters?.status) {
         query = query.eq('status', filters.status);
       }
-      if (filters?.category_id) {
+      if (filters?.category_id !== undefined) {
         query = query.eq('category_id', filters.category_id);
       }
       if (filters?.featured !== undefined) {
@@ -64,8 +64,8 @@ export const api = {
         .select(`
           *,
           categories (id, name, slug, color),
-          profiles (id, name, email),
-          article_tags (tag)
+          users (id, name, email),
+          article_tags ( tags ( name ) )
         `)
         .eq('slug', slug)
         .maybeSingle();
@@ -74,14 +74,14 @@ export const api = {
       return data;
     },
 
-    async getById(id: string) {
+    async getById(id: number) {
       const { data, error } = await supabase
         .from('articles')
         .select(`
           *,
           categories (id, name, slug, color),
-          profiles (id, name, email),
-          article_tags (tag)
+          users (id, name, email),
+          article_tags ( tags ( name ) )
         `)
         .eq('id', id)
         .maybeSingle();
@@ -100,17 +100,23 @@ export const api = {
       if (error) throw error;
 
       if (tags.length > 0 && data) {
-        const tagInserts = tags.map(tag => ({
-          article_id: data.id,
-          tag
-        }));
-        await supabase.from('article_tags').insert(tagInserts);
+        // upsert tags by name
+        const { data: tagsRows, error: tagErr } = await supabase
+          .from('tags')
+          .upsert(tags.map((name) => ({ name })), { onConflict: 'name' })
+          .select();
+        if (tagErr) throw tagErr;
+        const tagIds = (tagsRows || []).filter(Boolean).map((t: any) => ({ article_id: data.id as number, tag_id: t.id as number }));
+        if (tagIds.length) {
+          const { error: atErr } = await supabase.from('article_tags').insert(tagIds);
+          if (atErr) throw atErr;
+        }
       }
 
       return data;
     },
 
-    async update(id: string, updates: ArticleUpdate, tags?: string[]) {
+    async update(id: number, updates: ArticleUpdate, tags?: string[]) {
       const { data, error } = await supabase
         .from('articles')
         .update(updates)
@@ -121,21 +127,26 @@ export const api = {
       if (error) throw error;
 
       if (tags !== undefined) {
+        // replace tag set
         await supabase.from('article_tags').delete().eq('article_id', id);
-
         if (tags.length > 0) {
-          const tagInserts = tags.map(tag => ({
-            article_id: id,
-            tag
-          }));
-          await supabase.from('article_tags').insert(tagInserts);
+          const { data: tagsRows, error: tagErr } = await supabase
+            .from('tags')
+            .upsert(tags.map((name) => ({ name })), { onConflict: 'name' })
+            .select();
+          if (tagErr) throw tagErr;
+          const tagIds = (tagsRows || []).filter(Boolean).map((t: any) => ({ article_id: id, tag_id: t.id as number }));
+          if (tagIds.length) {
+            const { error: atErr } = await supabase.from('article_tags').insert(tagIds);
+            if (atErr) throw atErr;
+          }
         }
       }
 
       return data;
     },
 
-    async delete(id: string) {
+    async delete(id: number) {
       const { error } = await supabase
         .from('articles')
         .delete()
@@ -144,7 +155,7 @@ export const api = {
       if (error) throw error;
     },
 
-    async incrementViews(id: string) {
+    async incrementViews(id: number) {
       const { error } = await supabase.rpc('increment_article_views', { article_id: id });
       if (error) console.error('Failed to increment views:', error);
     }
@@ -188,7 +199,7 @@ export const api = {
       return data;
     },
 
-    async update(id: string, updates: CategoryUpdate) {
+    async update(id: number, updates: CategoryUpdate) {
       const { data, error } = await supabase
         .from('categories')
         .update(updates)
@@ -200,7 +211,7 @@ export const api = {
       return data;
     },
 
-    async delete(id: string) {
+    async delete(id: number) {
       const { error } = await supabase
         .from('categories')
         .delete()
@@ -209,7 +220,7 @@ export const api = {
       if (error) throw error;
     },
 
-    async updateOrder(categoryOrders: { id: string; display_order: number }[]) {
+    async updateOrder(categoryOrders: { id: number; display_order: number }[]) {
       const promises = categoryOrders.map(({ id, display_order }) =>
         supabase
           .from('categories')

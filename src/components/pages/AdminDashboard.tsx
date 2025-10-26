@@ -7,6 +7,7 @@ import {
   FileType, Video, Tag, Bell, Search, Image
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { api } from '../../lib/api';
 
 // Import CMS Components
 import { DashboardHome } from '../cms/DashboardHome';
@@ -32,13 +33,26 @@ export function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    // Check if user is logged in
-    const storedUser = localStorage.getItem('adminUser');
-    if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser));
-    } else {
-      navigate('/admin-login');
-    }
+    (async () => {
+      try {
+        const user = await api.auth.getUser();
+        const storedUser = localStorage.getItem('adminUser');
+        if (user && storedUser) {
+          const parsed = JSON.parse(storedUser);
+          const profile = await api.profiles.getById(user.id);
+          if (profile?.role && parsed.role !== profile.role) {
+            parsed.role = profile.role as any;
+            localStorage.setItem('adminUser', JSON.stringify(parsed));
+          }
+          setCurrentUser(parsed);
+        } else {
+          navigate('/admin-login');
+        }
+      } catch (e) {
+        console.error(e);
+        navigate('/admin-login');
+      }
+    })();
   }, [navigate]);
 
   const handleLogout = () => {
@@ -260,3 +274,5 @@ export function AdminDashboard() {
     </div>
   );
 }
+
+

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArticleCard } from '../ArticleCard';
 import { Sidebar } from '../Sidebar';
 import { Button } from '../ui/button';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '../ui/breadcrumb';
 import { Grid, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from '../Router';
+import { api } from '../../lib/api';
+import type { Article as DbArticle } from '../../lib/api';
 
 interface Article {
   id: string;
@@ -26,39 +28,56 @@ export function CategoryPage({ category, isQuickRead }: CategoryPageProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [currentPage, setCurrentPage] = useState(1);
   const articlesPerPage = 12;
+  const [loading, setLoading] = useState(true);
+  const [articles, setArticles] = useState<DbArticle[]>([]);
+  const [catSlug, setCatSlug] = useState<string>(category.toLowerCase());
+  const [catId, setCatId] = useState<number | null>(null);
 
-  // Mock articles data - in real app, this would come from API
-  const generateMockArticles = (count: number): Article[] => {
-    const articles: Article[] = [];
-    const baseImages = {
-      Politics: "https://images.unsplash.com/photo-1740645580404-3a58c3b98182?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmVha2luZyUyMG5ld3MlMjBwb2xpdGljc3xlbnwxfHx8fDE3NTgwMTA4NzV8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      Health: "https://images.unsplash.com/photo-1618498082410-b4aa22193b38?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxoZWFsdGhjYXJlJTIwbWVkaWNhbCUyMG5ld3N8ZW58MXx8fHwxNzU4MDEwODc2fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      Sports: "https://images.unsplash.com/photo-1631746410377-b0e23f61d083?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzcG9ydHMlMjBzdGFkaXVtJTIwY3Jvd2R8ZW58MXx8fHwxNzU3OTQ0ODE4fDA&ixlib=rb-4.1.0&q=80&w=1080",
-      Entertainment: "https://images.unsplash.com/photo-1675295275119-b3ffe5448c9c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxlbnRlcnRhaW5tZW50JTIwbW92aWVzJTIwY2VsZWJyaXR5fGVufDF8fHx8MTc1ODAxMDg3Nnww&ixlib=rb-4.1.0&q=80&w=1080",
-      News: "https://images.unsplash.com/photo-1740645580404-3a58c3b98182?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmVha2luZyUyMG5ld3MlMjBwb2xpdGljc3xlbnwxfHx8fDE3NTgwMTA4NzV8MA&ixlib=rb-4.1.0&q=80&w=1080"
-    };
-
-    for (let i = 1; i <= count; i++) {
-      articles.push({
-        id: `${category.toLowerCase()}-${i}`,
-        title: `${category} Article ${i}: Important Development`,
-        summary: `Detailed coverage of recent developments in ${category.toLowerCase()}. This article provides comprehensive analysis and expert opinions on the matter.`,
-        imageUrl: baseImages[category as keyof typeof baseImages] || baseImages.News,
-        category: category.toUpperCase(),
-        timeAgo: `${Math.floor(Math.random() * 12) + 1} hours ago`,
-        author: `Reporter ${i}`,
-        readTime: `${Math.floor(Math.random() * 5) + 2} min read`
-      });
-    }
-    return articles;
+  const timeAgo = (d: Date) => {
+    const diff = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (diff < 60) return `${diff} min ago`;
+    const h = Math.floor(diff / 60);
+    if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
+    const days = Math.floor(h / 24);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
   };
 
-  const allArticles = generateMockArticles(25);
-  const totalPages = Math.ceil(allArticles.length / articlesPerPage);
+  const toUi = (a: DbArticle) => ({
+    id: String(a.id),
+    title: a.title,
+    summary: a.summary || '',
+    imageUrl: a.featured_image_url || 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1080&q=80&auto=format&fit=crop',
+    category: category.toUpperCase(),
+    timeAgo: a.publish_date ? timeAgo(new Date(a.publish_date)) : 'Just now',
+    author: (a as any).users?.name || undefined,
+    readTime: a.read_time ? `${a.read_time} min read` : undefined,
+  });
+
+  useEffect(() => {
+    setCatSlug(category.toLowerCase());
+  }, [category]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const cat = await api.categories.getBySlug(catSlug);
+        const id = cat?.id ?? null;
+        setCatId(id);
+        const rows = await api.articles.getAll({ status: 'published', category_id: id ?? undefined, limit: 100 });
+        setArticles(rows || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [catSlug]);
+
+  const allArticles = useMemo(() => articles.map(toUi), [articles]);
+  const totalPages = Math.ceil(allArticles.length / articlesPerPage) || 1;
   const startIndex = (currentPage - 1) * articlesPerPage;
   const currentArticles = allArticles.slice(startIndex, startIndex + articlesPerPage);
-
-  // Featured article (first article)
   const featuredArticle = allArticles[0];
 
   const getCategoryColor = (cat: string) => {
@@ -116,27 +135,35 @@ export function CategoryPage({ category, isQuickRead }: CategoryPageProps) {
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Featured Story</h2>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
               <div className="aspect-video">
-                <img 
-                  src={featuredArticle.imageUrl} 
-                  alt={featuredArticle.title}
-                  className="w-full h-full object-cover"
-                />
+                {featuredArticle ? (
+                  <img 
+                    src={featuredArticle.imageUrl} 
+                    alt={featuredArticle.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-200 dark:bg-gray-700" />
+                )}
               </div>
               <div className="p-6">
                 <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold mb-3 ${colorClasses[color as keyof typeof colorClasses]}`}>
-                  {featuredArticle.category}
+                  {featuredArticle ? featuredArticle.category : category.toUpperCase()}
                 </div>
-                <Link to="/article" params={{ id: featuredArticle.id }}>
-                  <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                    {featuredArticle.title}
-                  </h3>
-                </Link>
-                <p className="text-gray-600 dark:text-gray-300 mb-4">{featuredArticle.summary}</p>
+                {featuredArticle && (
+                  <Link to="/article" params={{ id: featuredArticle.id }}>
+                    <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white hover:text-red-600 dark:hover:text-red-400 transition-colors">
+                      {featuredArticle.title}
+                    </h3>
+                  </Link>
+                )}
+                {featuredArticle && (
+                  <p className="text-gray-600 dark:text-gray-300 mb-4">{featuredArticle.summary}</p>
+                )}
                 <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-                  <span>{featuredArticle.author}</span>
+                  <span>{featuredArticle?.author || ''}</span>
                   <div className="flex items-center space-x-4">
-                    <span>{featuredArticle.timeAgo}</span>
-                    <span>{featuredArticle.readTime}</span>
+                    <span>{featuredArticle?.timeAgo || ''}</span>
+                    <span>{featuredArticle?.readTime || ''}</span>
                   </div>
                 </div>
               </div>

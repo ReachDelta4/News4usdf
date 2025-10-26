@@ -3,48 +3,18 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Link, useRouter } from '../Router';
 import { Shield, Eye, EyeOff, UserCheck } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { api } from '../../lib/api';
 
 type UserRole = 'admin' | 'editor' | 'viewer';
-
-interface AdminUser {
-  email: string;
-  password: string;
-  role: UserRole;
-  name: string;
-}
-
-// Mock admin users for demonstration
-const mockAdminUsers: AdminUser[] = [
-  {
-    email: 'admin@news4us.com',
-    password: 'admin123',
-    role: 'admin',
-    name: 'System Administrator'
-  },
-  {
-    email: 'editor@news4us.com',
-    password: 'editor123',
-    role: 'editor',
-    name: 'Chief Editor'
-  },
-  {
-    email: 'viewer@news4us.com',
-    password: 'viewer123',
-    role: 'viewer',
-    name: 'Content Reviewer'
-  }
-];
 
 export function AdminLoginPage() {
   const { navigate } = useRouter();
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
-    role: '' as UserRole | ''
+    password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -56,50 +26,26 @@ export function AdminLoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Mock authentication logic
-    const user = mockAdminUsers.find(
-      u => u.email === formData.email && u.password === formData.password && u.role === formData.role
-    );
-
-    if (user) {
-      toast.success(`Welcome back, ${user.name}!`);
-      // Store user session (in real app, use proper session management)
-      localStorage.setItem('adminUser', JSON.stringify(user));
-      navigate('/admin');
-    } else {
-      toast.error('Invalid credentials or role selection');
-    }
-
-    setIsLoading(false);
-  };
-
-  const getRoleIcon = (role: UserRole) => {
-    switch (role) {
-      case 'admin':
-        return '👑';
-      case 'editor':
-        return '✏️';
-      case 'viewer':
-        return '👁️';
-      default:
-        return '👤';
-    }
-  };
-
-  const getRoleDescription = (role: UserRole) => {
-    switch (role) {
-      case 'admin':
-        return 'Full system access, user management, and all privileges';
-      case 'editor':
-        return 'Content creation, editing, and publishing capabilities';
-      case 'viewer':
-        return 'Read-only access to content and analytics';
-      default:
-        return '';
+    try {
+      const { user } = await api.auth.signIn(formData.email, formData.password);
+      if (!user) {
+        toast.error('Invalid email or password');
+      } else {
+        const profile = await api.profiles.getById(user.id);
+        const currentUser = {
+          email: user.email || formData.email,
+          name: (profile?.name || (user as any)?.user_metadata?.name || user.email || 'Admin') as string,
+          role: ((profile?.role as any) || 'viewer') as UserRole,
+        };
+        localStorage.setItem('adminUser', JSON.stringify(currentUser));
+        toast.success(`Welcome back, ${currentUser.name}!`);
+        navigate('/admin');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -156,40 +102,6 @@ export function AdminLoginPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="role">Access Level</Label>
-              <Select onValueChange={(value) => handleInputChange('role', value)} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">
-                    <div className="flex items-center space-x-2">
-                      <span>{getRoleIcon('admin')}</span>
-                      <span>Administrator</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="editor">
-                    <div className="flex items-center space-x-2">
-                      <span>{getRoleIcon('editor')}</span>
-                      <span>Editor</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="viewer">
-                    <div className="flex items-center space-x-2">
-                      <span>{getRoleIcon('viewer')}</span>
-                      <span>Viewer</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              {formData.role && (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {getRoleDescription(formData.role as UserRole)}
-                </p>
-              )}
-            </div>
-
             <Button 
               type="submit" 
               className="w-full bg-red-600 hover:bg-red-700"
@@ -209,16 +121,6 @@ export function AdminLoginPage() {
             </Button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Demo Credentials:</h4>
-            <div className="space-y-1 text-xs text-gray-600 dark:text-gray-300">
-              <div><strong>Admin:</strong> admin@news4us.com / admin123</div>
-              <div><strong>Editor:</strong> editor@news4us.com / editor123</div>
-              <div><strong>Viewer:</strong> viewer@news4us.com / viewer123</div>
-            </div>
-          </div>
-
           <div className="mt-6 text-center">
             <Link 
               to="/auth" 
@@ -232,3 +134,4 @@ export function AdminLoginPage() {
     </div>
   );
 }
+
