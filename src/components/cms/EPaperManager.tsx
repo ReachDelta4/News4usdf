@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -15,6 +15,7 @@ import {
 } from '../ui/dialog';
 import { Upload, FileText, Eye, Trash2, Calendar, Download, Plus } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { api } from '../../lib/api';
 
 interface EPaper {
   id: string;
@@ -29,30 +30,7 @@ interface EPaper {
 }
 
 export function EPaperManager() {
-  const [ePapers, setEPapers] = useState<EPaper[]>([
-    {
-      id: '1',
-      title: 'NEWS4US Daily - January 20, 2025',
-      description: 'Complete daily newspaper edition',
-      date: '2025-01-20',
-      fileUrl: '#',
-      fileName: 'news4us-jan-20-2025.pdf',
-      fileSize: '12.5 MB',
-      visible: true,
-      downloads: 234
-    },
-    {
-      id: '2',
-      title: 'NEWS4US Daily - January 19, 2025',
-      description: 'Complete daily newspaper edition',
-      date: '2025-01-19',
-      fileUrl: '#',
-      fileName: 'news4us-jan-19-2025.pdf',
-      fileSize: '11.8 MB',
-      visible: true,
-      downloads: 189
-    },
-  ]);
+  const [ePapers, setEPapers] = useState<EPaper[]>([]);
 
   const [editingPaper, setEditingPaper] = useState<EPaper | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -80,7 +58,28 @@ export function EPaperManager() {
     }
   };
 
-  const handleSave = () => {
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await api.ePapers.getAll();
+        setEPapers((rows || []).map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          description: r.description || '',
+          date: r.publication_date,
+          fileUrl: r.file_url,
+          fileName: r.file_name,
+          fileSize: r.file_size ? `${(r.file_size / (1024 * 1024)).toFixed(1)} MB` : '',
+          visible: !!r.visible,
+          downloads: r.downloads || 0,
+        })));
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
     if (!editingPaper) return;
 
     if (!selectedFile && !editingPaper.id) {
@@ -88,22 +87,52 @@ export function EPaperManager() {
       return;
     }
 
-    if (editingPaper.id) {
-      setEPapers(prev =>
-        prev.map(paper => paper.id === editingPaper.id ? editingPaper : paper)
-      );
-      toast.success('E-Paper updated successfully');
-    } else {
-      const newPaper: EPaper = {
-        ...editingPaper,
-        id: Date.now().toString(),
-        fileName: selectedFile?.name || '',
-        fileSize: selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : '',
-        fileUrl: previewUrl || '#',
-        downloads: 0,
-      };
-      setEPapers(prev => [...prev, newPaper]);
-      toast.success('E-Paper uploaded successfully');
+    try {
+      if (editingPaper.id) {
+        // update metadata only
+        await api.ePapers.update(editingPaper.id, {
+          title: editingPaper.title,
+          description: editingPaper.description,
+          publication_date: editingPaper.date,
+          visible: editingPaper.visible,
+        } as any);
+        setEPapers(prev => prev.map(paper => paper.id === editingPaper.id ? editingPaper : paper));
+        toast.success('E-Paper updated successfully');
+      } else {
+        if (!selectedFile) return;
+        if (selectedFile.type !== 'application/pdf') {
+          toast.error('Please select a PDF file');
+          return;
+        }
+        const path = `${Date.now()}_${selectedFile.name}`;
+        const { publicUrl } = await api.storage.uploadFile('e-papers', path, selectedFile);
+        const created = await api.ePapers.create({
+          title: editingPaper.title,
+          description: editingPaper.description,
+          publication_date: editingPaper.date,
+          file_url: publicUrl,
+          storage_path: path,
+          file_name: selectedFile.name,
+          file_size: selectedFile.size,
+          visible: editingPaper.visible,
+        } as any);
+        const newPaper: EPaper = {
+          id: created.id,
+          title: created.title,
+          description: created.description || '',
+          date: created.publication_date,
+          fileUrl: created.file_url,
+          fileName: created.file_name,
+          fileSize: created.file_size ? `${(created.file_size / (1024 * 1024)).toFixed(1)} MB` : '',
+          visible: !!created.visible,
+          downloads: created.downloads || 0,
+        };
+        setEPapers(prev => [...prev, newPaper]);
+        toast.success('E-Paper uploaded successfully');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save E-Paper');
     }
 
     setIsDialogOpen(false);
@@ -112,19 +141,25 @@ export function EPaperManager() {
     setPreviewUrl(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this E-Paper?')) {
-      setEPapers(prev => prev.filter(paper => paper.id !== id));
-      toast.success('E-Paper deleted successfully');
+      try {
+        await api.ePapers.delete(id);
+        setEPapers(prev => prev.filter(paper => paper.id !== id));
+        toast.success('E-Paper deleted successfully');
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to delete E-Paper');
+      }
     }
   };
 
-  const handleToggleVisibility = (id: string) => {
-    setEPapers(prev =>
-      prev.map(paper =>
-        paper.id === id ? { ...paper, visible: !paper.visible } : paper
-      )
-    );
+  const handleToggleVisibility = async (id: string) => {
+    const paper = ePapers.find(p => p.id === id);
+    if (!paper) return;
+    const next = !paper.visible;
+    setEPapers(prev => prev.map(p => p.id === id ? { ...p, visible: next } : p));
+    try { await api.ePapers.update(id, { visible: next } as any); } catch (e) { console.error(e); }
   };
 
   return (

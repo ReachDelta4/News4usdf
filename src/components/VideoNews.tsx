@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { VideoPlayer, VideoThumbnail } from './VideoPlayer';
 import { VideoShare } from './SocialShare';
 import { Play } from 'lucide-react';
+import { api } from '../lib/api';
 
 export function VideoNews() {
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
-
-  const videoNews = [
+  const [videoNews, setVideoNews] = useState<any[]>([
     {
       id: 1,
       title: "Breaking: Global Climate Summit Reaches Historic Agreement",
@@ -67,7 +67,18 @@ export function VideoNews() {
       timeAgo: "2 days ago",
       isLive: false
     }
-  ];
+  ]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const configured = await api.settings.get<any[]>('video_news');
+        if (Array.isArray(configured) && configured.length) {
+          setVideoNews(configured.map((v, i) => ({ id: i + 1, ...v })));
+        }
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
 
   const openVideo = (video: any) => {
     setSelectedVideo(video);

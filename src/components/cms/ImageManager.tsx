@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { ImageUploader } from './ImageUploader';
+import { api } from '../../lib/api';
 
 interface ImageItem {
   id: string;
@@ -21,48 +22,8 @@ interface ImageItem {
 }
 
 export function ImageManager() {
-  const [images, setImages] = useState<ImageItem[]>([
-    {
-      id: '1',
-      url: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400',
-      title: 'Dr. B. M. Sivaprasad',
-      category: 'leadership',
-      uploadDate: '2025-01-15',
-      alt: 'CEO & Editor-in-Chief'
-    },
-    {
-      id: '2',
-      url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400',
-      title: 'B. T. Vijay Kumar',
-      category: 'leadership',
-      uploadDate: '2025-01-15',
-      alt: 'Andhra Pradesh Head'
-    },
-    {
-      id: '3',
-      url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400',
-      title: 'S. Bhavesh',
-      category: 'leadership',
-      uploadDate: '2025-01-15',
-      alt: 'Lead Developer'
-    },
-    {
-      id: '4',
-      url: 'https://images.unsplash.com/photo-1586339949916-3e9457bef6d3?w=800',
-      title: 'Breaking News Banner',
-      category: 'banner',
-      uploadDate: '2025-01-20',
-      alt: 'Homepage Hero Banner'
-    },
-    {
-      id: '5',
-      url: 'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=600',
-      title: 'Politics Category Cover',
-      category: 'category',
-      uploadDate: '2025-01-18',
-      alt: 'Politics Section Background'
-    },
-  ]);
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedImage, setSelectedImage] = useState<ImageItem | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -70,10 +31,34 @@ export function ImageManager() {
   const [showUploader, setShowUploader] = useState(false);
   const [uploadCategory, setUploadCategory] = useState<ImageItem['category']>('article');
 
-  const handleDelete = (id: string) => {
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await api.mediaFiles.getAll();
+        setImages((rows || []).map((r: any) => ({
+          id: r.id,
+          url: r.file_url,
+          title: r.title,
+          category: (r.file_type || 'article') as ImageItem['category'],
+          uploadDate: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : '',
+          alt: r.alt_text || ''
+        })));
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this image?')) {
-      setImages(images.filter(img => img.id !== id));
-      toast.success('Image deleted successfully');
+      try {
+        await api.mediaFiles.delete(id);
+        setImages(prev => prev.filter(img => img.id !== id));
+        toast.success('Image deleted successfully');
+      } catch (e) {
+        console.error(e);
+        toast.error('Failed to delete image');
+      }
     }
   };
 
@@ -83,31 +68,56 @@ export function ImageManager() {
     setIsEditing(true);
   };
 
-  const handleSaveEdit = () => {
-    if (selectedImage) {
-      setImages(images.map(img => 
-        img.id === selectedImage.id 
-          ? { ...img, title: editForm.title, alt: editForm.alt }
-          : img
-      ));
+  const handleSaveEdit = async () => {
+    if (!selectedImage) return;
+    try {
+      await api.mediaFiles.update(selectedImage.id, { title: editForm.title, alt_text: editForm.alt } as any);
+      setImages(prev => prev.map(img => img.id === selectedImage.id ? { ...img, title: editForm.title, alt: editForm.alt } : img));
       toast.success('Image updated successfully');
       setIsEditing(false);
       setSelectedImage(null);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update image');
     }
   };
 
-  const handleImageUpload = (imageData: { url: string; width: number; height: number }) => {
-    const newImage: ImageItem = {
-      id: Date.now().toString(),
-      url: imageData.url,
-      title: `New ${uploadCategory} image`,
-      category: uploadCategory,
-      uploadDate: new Date().toISOString().split('T')[0],
-      alt: `${uploadCategory} image`
-    };
-    setImages([newImage, ...images]);
-    toast.success('Image uploaded successfully');
-    setShowUploader(false);
+  const handleFileChosen = async (file: File) => {
+    try {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+      }
+      const path = `${Date.now()}_${file.name}`;
+      const { publicUrl } = await api.storage.uploadFile('media', path, file);
+      const created = await api.mediaFiles.create({
+        title: file.name,
+        alt_text: `${uploadCategory} image`,
+        file_url: publicUrl,
+        storage_path: path,
+        file_type: uploadCategory,
+        mime_type: file.type,
+        file_size: file.size,
+      } as any);
+      const newImage: ImageItem = {
+        id: created.id,
+        url: created.file_url,
+        title: created.title,
+        category: created.file_type as ImageItem['category'],
+        uploadDate: created.created_at ? new Date(created.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        alt: created.alt_text || ''
+      };
+      setImages(prev => [newImage, ...prev]);
+      toast.success('Image uploaded successfully');
+      setShowUploader(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to upload image');
+    }
+  };
+
+  const handleImageUpload = (_imageData: { url: string; width: number; height: number }) => {
+    toast.info('Use the Upload Image button to select a file');
   };
 
   const filterImagesByCategory = (category: ImageItem['category']) => {
@@ -162,13 +172,16 @@ export function ImageManager() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Image Manager</h1>
           <p className="text-gray-600 dark:text-gray-300">Upload and manage all website images</p>
         </div>
-        <Button 
-          onClick={() => setShowUploader(true)}
-          className="bg-red-600 hover:bg-red-700"
-        >
-          <Upload className="w-4 h-4 mr-2" />
-          Upload Image
-        </Button>
+        <div>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f=e.target.files?.[0]; if (f) handleFileChosen(f); }} />
+          <Button 
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Upload Image
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="all" className="space-y-6">

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { Play, TrendingUp, Mail } from 'lucide-react';
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
+import { api } from '../lib/api';
 
 export function Sidebar() {
   const [email, setEmail] = useState('');
@@ -33,13 +34,24 @@ export function Sidebar() {
     }
   ];
 
-  const trendingArticles = [
+  const [trendingArticles, setTrendingArticles] = useState<string[]>([
     "Economic reforms reshape global markets",
     "Climate summit reaches historic agreement", 
     "Technology breakthrough in AI research",
     "Sports championship breaks viewership records",
     "Entertainment industry shows strong recovery"
-  ];
+  ]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await api.articles.getAll({ status: 'published', limit: 20 });
+        const top = (rows || []).sort((a: any, b: any) => (b.views || 0) - (a.views || 0)).slice(0, 5);
+        const titles = top.map((r: any) => r.title).filter(Boolean);
+        if (titles.length) setTrendingArticles(titles);
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();

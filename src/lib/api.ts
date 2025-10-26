@@ -477,6 +477,28 @@ export const api = {
     }
   },
 
+  settings: {
+    async get<T = any>(key: string): Promise<T | null> {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('*')
+        .eq('key', key)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.value ?? null) as T | null;
+    },
+
+    async upsert(key: string, value: any, description?: string) {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .upsert({ key, value, description })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
+  },
+
   auth: {
     async signUp(email: string, password: string, name: string) {
       const { data, error } = await supabase.auth.signUp({

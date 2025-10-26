@@ -8,7 +8,8 @@ import { Separator } from '../ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Slider } from '../ui/slider';
 import { User, Bell, Globe, Layout, Shield, Save, Youtube, Twitter, Facebook, Mail, Phone, Image as ImageIcon, Upload } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { api } from '../../lib/api';
 
 export function SettingsPanel() {
   const [settings, setSettings] = useState({
@@ -59,9 +60,46 @@ export function SettingsPanel() {
     },
   });
 
-  const handleSave = () => {
-    // Save settings logic here
-    toast.success('Settings saved successfully');
+  // Homepage settings stored in site_settings
+  const [breakingNewsText, setBreakingNewsText] = useState('');
+  const [videoNewsJson, setVideoNewsJson] = useState('');
+  const [bannerCount, setBannerCount] = useState<number>(3);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [breaking, videos, banners] = await Promise.all([
+          api.settings.get<string[]>('breaking_news'),
+          api.settings.get<any[]>('video_news'),
+          api.settings.get<number>('homepage_banner_count')
+        ]);
+        if (Array.isArray(breaking)) setBreakingNewsText(breaking.join('\n'));
+        if (videos) {
+          try { setVideoNewsJson(JSON.stringify(videos, null, 2)); } catch {}
+        }
+        if (typeof banners === 'number') setBannerCount(banners);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const breaking = breakingNewsText.split('\n').map(s => s.trim()).filter(Boolean);
+      await api.settings.upsert('breaking_news', breaking);
+      if (videoNewsJson.trim()) {
+        const parsed = JSON.parse(videoNewsJson);
+        await api.settings.upsert('video_news', parsed);
+      } else {
+        await api.settings.upsert('video_news', []);
+      }
+      await api.settings.upsert('homepage_banner_count', bannerCount);
+      toast.success('Settings saved successfully');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save settings');
+    }
   };
 
   const handleReset = () => {
@@ -90,7 +128,7 @@ export function SettingsPanel() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto">
           <TabsTrigger value="account" className="flex items-center gap-2">
             <User className="w-4 h-4" />
             <span className="hidden sm:inline">Account</span>
@@ -106,6 +144,10 @@ export function SettingsPanel() {
           <TabsTrigger value="security" className="flex items-center gap-2">
             <Shield className="w-4 h-4" />
             <span className="hidden sm:inline">Security</span>
+          </TabsTrigger>
+          <TabsTrigger value="homepage" className="flex items-center gap-2">
+            <Globe className="w-4 h-4" />
+            <span className="hidden sm:inline">Homepage</span>
           </TabsTrigger>
         </TabsList>
 
@@ -352,6 +394,61 @@ export function SettingsPanel() {
               <Button className="bg-red-600 hover:bg-red-700">
                 Update Password
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Homepage */}
+        <TabsContent value="homepage" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Breaking News</CardTitle>
+              <CardDescription>One headline per line. If empty, latest published articles will be used.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Label htmlFor="breaking-lines">Headlines</Label>
+              <textarea
+                id="breaking-lines"
+                value={breakingNewsText}
+                onChange={(e) => setBreakingNewsText(e.target.value)}
+                className="w-full mt-2 h-32 p-3 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Video News (YouTube)</CardTitle>
+              <CardDescription>Provide a JSON array of objects: [{`{ title, videoId, duration, source, views, timeAgo, isLive }`}].</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Label htmlFor="video-json">Videos JSON</Label>
+              <textarea
+                id="video-json"
+                value={videoNewsJson}
+                onChange={(e) => setVideoNewsJson(e.target.value)}
+                className="w-full mt-2 h-40 p-3 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 font-mono text-xs"
+                placeholder='[\n  { "title": "...", "videoId": "...", "source": "NEWS4US" }\n]'
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Hero Banners</CardTitle>
+              <CardDescription>Number of banner images (file_type = "banner") to rotate in hero background.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Label htmlFor="banner-count">Count</Label>
+              <Input
+                id="banner-count"
+                type="number"
+                min={0}
+                max={10}
+                value={bannerCount}
+                onChange={(e) => setBannerCount(parseInt(e.target.value || '0', 10))}
+                className="max-w-[200px] mt-1"
+              />
             </CardContent>
           </Card>
         </TabsContent>
