@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useEffect, useState, createContext, useContext } from 'react';
 
 // Route Context for navigation
 const RouteContext = createContext<{
@@ -22,10 +22,24 @@ export function Router({ children }: RouterProps) {
   const [params, setParams] = useState<Record<string, string>>({});
 
   const navigate = (path: string, newParams: Record<string, string> = {}) => {
+    try { window.history.pushState({ params: newParams }, '', path); } catch {} 
     setCurrentRoute(path);
     setParams(newParams);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    const initial = window.location?.pathname || '/';
+    setCurrentRoute(initial);
+    const handler = (event: PopStateEvent) => {
+      const path = window.location?.pathname || '/';
+      const stParams = (event.state && (event.state as any).params) || {} as Record<string, string>;
+      setCurrentRoute(path);
+      setParams(stParams);
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
 
   return (
     <RouteContext.Provider value={{ currentRoute, params, navigate }}>
@@ -90,3 +104,4 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
 );
 
 Link.displayName = 'Link';
+
