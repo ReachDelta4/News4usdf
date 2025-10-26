@@ -74,7 +74,8 @@ export function VideoNews() {
       try {
         const configured = await api.settings.get<any[]>('video_news');
         if (Array.isArray(configured) && configured.length) {
-          setVideoNews(configured.map((v, i) => ({ id: i + 1, ...v })));
+          const safe = configured.filter((v) => v.visible !== false);
+          setVideoNews(safe.map((v, i) => ({ id: i + 1, ...v })));
         }
       } catch (e) { console.error(e); }
     })();

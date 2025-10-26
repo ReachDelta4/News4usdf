@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,7 +14,7 @@ import {
 } from '../ui/select';
 import { 
   Plus, Edit, Trash2, Eye, Save, ArrowLeft, Calendar,
-  Tag, FileText, GripVertical
+  Tag, FileText, GripVertical, Star
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { RichTextEditor } from './RichTextEditor';
@@ -41,36 +41,8 @@ interface ArticlesPanelProps {
 }
 
 export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
-  const [articles, setArticles] = useState<Article[]>([
-    {
-      id: '1',
-      title: 'Senate Passes Infrastructure Bill',
-      slug: 'senate-passes-infrastructure-bill',
-      category: 'Politics',
-      tags: ['politics', 'infrastructure', 'legislation'],
-      content: '<h2>Historic Bipartisan Legislation</h2><p>The Senate has passed a major infrastructure bill...</p>',
-      summary: 'Historic bipartisan legislation brings improvements to roads, bridges, and digital infrastructure.',
-      status: 'published',
-      publishDate: '2025-01-20',
-      author: 'Sarah Martinez',
-      views: 15420,
-      featured: true,
-    },
-    {
-      id: '2',
-      title: 'Cancer Treatment Breakthrough',
-      slug: 'cancer-treatment-breakthrough',
-      category: 'Health',
-      tags: ['health', 'medical', 'research'],
-      content: '<h2>Revolutionary Treatment Shows Promise</h2><p>Clinical trials demonstrate significant results...</p>',
-      summary: 'Clinical trials demonstrate revolutionary approach to cancer treatment.',
-      status: 'scheduled',
-      publishDate: '2025-01-21',
-      author: 'Dr. Emily Rodriguez',
-      views: 0,
-      featured: false,
-    },
-  ]);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
 
   const [view, setView] = useState<'list' | 'editor' | 'featured'>('list');
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
@@ -78,6 +50,43 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
   const [draggedItem, setDraggedItem] = useState<number | null>(null);
 
   const featuredArticles = articles.filter(a => a.featured);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cats, rows] = await Promise.all([
+          api.categories.getAll(),
+          api.articles.getAll({ limit: 200 }),
+        ]);
+        setCategories((cats || []).map((c: any) => ({ id: c.id, name: c.name })));
+        const mapped = (rows || []).map((r: any) => ({
+          id: String(r.id),
+          title: r.title,
+          slug: r.slug || '',
+          category: r.categories?.name || 'News',
+          tags: (r.article_tags || []).map((t: any) => t?.tags?.name).filter(Boolean),
+          content: r.content || '',
+          summary: r.summary || '',
+          status: (r.status || 'draft') as any,
+          publishDate: r.publish_date ? new Date(r.publish_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          author: r.users?.name || r.users?.email || currentUser?.name || '',
+          views: r.views || 0,
+          featuredImage: r.featured_image_url || undefined,
+          featured: !!r.featured,
+        }));
+        setArticles(mapped);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const categoriesByName = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of categories) m.set((c.name || '').toLowerCase(), c.id);
+    return m;
+  }, [categories]);
 
   const handleCreate = () => {
     setEditingArticle({
@@ -539,12 +548,9 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Politics">Politics</SelectItem>
-                      <SelectItem value="Health">Health</SelectItem>
-                      <SelectItem value="Sports">Sports</SelectItem>
-                      <SelectItem value="Entertainment">Entertainment</SelectItem>
-                      <SelectItem value="Technology">Technology</SelectItem>
-                      <SelectItem value="Business">Business</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

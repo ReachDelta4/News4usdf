@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -21,6 +21,7 @@ import {
 } from '../ui/select';
 import { Plus, Edit, Trash2, GripVertical, Video, Eye } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { api } from '../../lib/api';
 
 interface YouTubeVideo {
   id: string;
@@ -34,28 +35,28 @@ interface YouTubeVideo {
 }
 
 export function YouTubeManager() {
-  const [videos, setVideos] = useState<YouTubeVideo[]>([
-    {
-      id: '1',
-      title: 'Live: Breaking News Coverage',
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      videoId: 'dQw4w9WgXcQ',
-      thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
-      category: 'Politics',
-      visible: true,
-      views: 12500
-    },
-    {
-      id: '2',
-      title: 'Health Tips: Daily Wellness',
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      videoId: 'dQw4w9WgXcQ',
-      thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
-      category: 'Health',
-      visible: true,
-      views: 8900
-    },
-  ]);
+  const [videos, setVideos] = useState<YouTubeVideo[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const configured = await api.settings.get<any[]>('video_news');
+        if (Array.isArray(configured)) {
+          const mapped: YouTubeVideo[] = configured.map((v: any, idx: number) => ({
+            id: String(v.id ?? idx + 1),
+            title: v.title ?? '',
+            url: v.url ?? (v.videoId ? `https://www.youtube.com/watch?v=${v.videoId}` : ''),
+            videoId: v.videoId ?? '',
+            thumbnail: v.thumbnail ?? (v.videoId ? `https://img.youtube.com/vi/${v.videoId}/maxresdefault.jpg` : ''),
+            category: v.category ?? 'General',
+            visible: v.visible !== false,
+            views: typeof v.views === 'number' ? v.views : 0,
+          }));
+          setVideos(mapped);
+        }
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
 
   const [editingVideo, setEditingVideo] = useState<YouTubeVideo | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -89,7 +90,23 @@ export function YouTubeManager() {
     toast.success('Video order updated');
   };
 
-  const handleSave = () => {
+  const persist = async (next: YouTubeVideo[]) => {
+    try {
+      const payload = next.map((v, i) => ({
+        id: i + 1,
+        title: v.title,
+        url: v.url,
+        videoId: v.videoId,
+        thumbnail: v.thumbnail,
+        category: v.category,
+        visible: v.visible,
+        views: v.views,
+      }));
+      await api.settings.upsert('video_news', payload);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleSave = async () => {
     if (!editingVideo) return;
 
     if (!editingVideo.url) {
@@ -110,17 +127,19 @@ export function YouTubeManager() {
     };
 
     if (editingVideo.id) {
-      setVideos(prev =>
-        prev.map(video => video.id === editingVideo.id ? videoWithId : video)
-      );
+      const next = (prev => prev.map(video => video.id === editingVideo.id ? videoWithId : video))(videos);
+      setVideos(next);
+      await persist(next);
       toast.success('Video updated successfully');
     } else {
-      const newVideo = {
+      const newVideo: YouTubeVideo = {
         ...videoWithId,
         id: Date.now().toString(),
         views: 0,
       };
-      setVideos(prev => [...prev, newVideo]);
+      const next = [...videos, newVideo];
+      setVideos(next);
+      await persist(next);
       toast.success('Video added successfully');
     }
 
@@ -128,19 +147,21 @@ export function YouTubeManager() {
     setEditingVideo(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this video?')) {
-      setVideos(prev => prev.filter(video => video.id !== id));
+      const next = videos.filter(video => video.id !== id);
+      setVideos(next);
+      await persist(next);
       toast.success('Video deleted successfully');
     }
   };
 
-  const handleToggleVisibility = (id: string) => {
-    setVideos(prev =>
-      prev.map(video =>
-        video.id === id ? { ...video, visible: !video.visible } : video
-      )
+  const handleToggleVisibility = async (id: string) => {
+    const next = videos.map(video =>
+      video.id === id ? { ...video, visible: !video.visible } : video
     );
+    setVideos(next);
+    await persist(next);
   };
 
   return (

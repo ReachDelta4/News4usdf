@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '../ui/breadcrumb';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -6,53 +6,35 @@ import { Link } from '../Router';
 import { Calendar, Download, Eye, FileText, ZoomIn, ZoomOut, RotateCw, Share2 } from 'lucide-react';
 import { Sidebar } from '../Sidebar';
 import { SocialShare } from '../SocialShare';
+import { api } from '../../lib/api';
 
 export function EPaperPage() {
   const [selectedEdition, setSelectedEdition] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const [rotation, setRotation] = useState(0);
+  const [editions, setEditions] = useState<Array<{ id: string; date: string; title: string; thumbnail?: string; pdfUrl: string; size?: string; pages?: number }>>([]);
 
-  // Mock e-paper editions
-  const editions = [
-    {
-      id: '1',
-      date: 'January 20, 2024',
-      title: 'Morning Edition',
-      thumbnail: 'https://images.unsplash.com/photo-1586953208448-b95a79798f07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxuZXdzcGFwZXIlMjBmcm9udCUyMHBhZ2V8ZW58MXx8fHwxNzU4MDEwODc2fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      pdfUrl: '/sample-newspaper.pdf',
-      size: '12.4 MB',
-      pages: 24
-    },
-    {
-      id: '2',
-      date: 'January 19, 2024',
-      title: 'Evening Edition',
-      thumbnail: 'https://images.unsplash.com/photo-1586953208448-b95a79798f07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxuZXdzcGFwZXIlMjBmcm9udCUyMHBhZ2V8ZW58MXx8fHwxNzU4MDEwODc2fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      pdfUrl: '/sample-newspaper.pdf',
-      size: '11.8 MB',
-      pages: 20
-    },
-    {
-      id: '3',
-      date: 'January 18, 2024',
-      title: 'Morning Edition',
-      thumbnail: 'https://images.unsplash.com/photo-1586953208448-b95a79798f07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxuZXdzcGFwZXIlMjBmcm9udCUyMHBhZ2V8ZW58MXx8fHwxNzU4MDEwODc2fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      pdfUrl: '/sample-newspaper.pdf',
-      size: '10.9 MB',
-      pages: 18
-    },
-    {
-      id: '4',
-      date: 'January 17, 2024',
-      title: 'Weekend Special',
-      thumbnail: 'https://images.unsplash.com/photo-1586953208448-b95a79798f07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxuZXdzcGFwZXIlMjBmcm9udCUyMHBhZ2V8ZW58MXx8fHwxNzU4MDEwODc2fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      pdfUrl: '/sample-newspaper.pdf',
-      size: '15.2 MB',
-      pages: 32
-    }
-  ];
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await api.ePapers.getAll(true);
+        const mapped = (rows || []).map((r: any) => ({
+          id: String(r.id),
+          date: r.publication_date ? new Date(r.publication_date).toLocaleDateString() : '',
+          title: r.title,
+          thumbnail: undefined as string | undefined,
+          pdfUrl: r.file_url,
+          size: r.file_size ? `${(r.file_size / (1024 * 1024)).toFixed(1)} MB` : undefined,
+          pages: undefined,
+        }));
+        setEditions(mapped);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
 
-  const selectedEditionData = editions.find(edition => edition.id === selectedEdition);
+  const selectedEditionData = useMemo(() => editions.find(edition => edition.id === selectedEdition), [editions, selectedEdition]);
 
   const handleZoomIn = () => setZoom(prev => Math.min(200, prev + 25));
   const handleZoomOut = () => setZoom(prev => Math.max(50, prev - 25));
@@ -122,7 +104,7 @@ export function EPaperPage() {
                         <Eye className="w-4 h-4 mr-2" />
                         Read Online
                       </Button>
-                      <Button variant="outline">
+                      <Button variant="outline" onClick={() => { if (editions[0]?.id) { api.ePapers.incrementDownloads(editions[0].id); } if (editions[0]?.pdfUrl) window.open(editions[0].pdfUrl, '_blank'); }}>
                         <Download className="w-4 h-4 mr-2" />
                         Download PDF
                       </Button>
@@ -163,7 +145,7 @@ export function EPaperPage() {
                             <Eye className="w-4 h-4 mr-1" />
                             Read
                           </Button>
-                          <Button size="sm" variant="outline">
+                          <Button size="sm" variant="outline" onClick={() => { api.ePapers.incrementDownloads(edition.id); if (edition.pdfUrl) window.open(edition.pdfUrl, '_blank'); }}>
                             <Download className="w-4 h-4" />
                           </Button>
                         </div>

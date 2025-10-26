@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -24,6 +24,7 @@ import {
   CheckCircle, XCircle, Key
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { api } from '../../lib/api';
 
 interface CMSUser {
   id: string;
@@ -40,52 +41,34 @@ interface CMSUser {
 }
 
 export function UserManager() {
-  const [users, setUsers] = useState<CMSUser[]>([
-    {
-      id: '1',
-      name: 'John Admin',
-      email: 'admin@news4us.com',
-      phone: '+1234567890',
-      role: 'admin',
-      status: 'active',
-      emailVerified: true,
-      phoneVerified: true,
-      twoFactorEnabled: true,
-      lastLogin: '2025-01-20 10:30',
-      articlesCount: 45
-    },
-    {
-      id: '2',
-      name: 'Sarah Editor',
-      email: 'sarah@news4us.com',
-      phone: '+1234567891',
-      role: 'editor',
-      status: 'active',
-      emailVerified: true,
-      phoneVerified: false,
-      twoFactorEnabled: false,
-      lastLogin: '2025-01-20 09:15',
-      articlesCount: 32
-    },
-    {
-      id: '3',
-      name: 'Mike Viewer',
-      email: 'mike@news4us.com',
-      phone: '+1234567892',
-      role: 'viewer',
-      status: 'inactive',
-      emailVerified: false,
-      phoneVerified: false,
-      twoFactorEnabled: false,
-      lastLogin: '2025-01-15 14:20',
-      articlesCount: 0
-    },
-  ]);
+  const [users, setUsers] = useState<CMSUser[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await api.profiles.getAll();
+        const mapped: CMSUser[] = (rows || []).map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          email: r.email,
+          phone: r.phone || '',
+          role: (r.role as any) || 'viewer',
+          status: (r.status as any) || 'active',
+          emailVerified: !!r.email_verified,
+          phoneVerified: !!r.phone_verified,
+          twoFactorEnabled: !!r.two_factor_enabled,
+          lastLogin: r.last_login ? new Date(r.last_login).toLocaleString() : 'Never',
+          articlesCount: 0,
+        }));
+        setUsers(mapped);
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
 
   const [editingUser, setEditingUser] = useState<CMSUser | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingUser) return;
 
     if (!editingUser.name || !editingUser.email) {
@@ -94,44 +77,49 @@ export function UserManager() {
     }
 
     if (editingUser.id) {
-      setUsers(prev =>
-        prev.map(user => user.id === editingUser.id ? editingUser : user)
-      );
-      toast.success('User updated successfully');
+      try {
+        await api.profiles.update(editingUser.id, {
+          name: editingUser.name,
+          email: editingUser.email,
+          phone: editingUser.phone || null,
+          role: editingUser.role as any,
+          status: editingUser.status as any,
+          email_verified: editingUser.emailVerified,
+          phone_verified: editingUser.phoneVerified,
+          two_factor_enabled: editingUser.twoFactorEnabled,
+        } as any);
+        setUsers(prev => prev.map(user => user.id === editingUser.id ? editingUser : user));
+        toast.success('User updated successfully');
+      } catch (e) { console.error(e); toast.error('Failed to update user'); }
     } else {
-      const newUser: CMSUser = {
-        ...editingUser,
-        id: Date.now().toString(),
-        lastLogin: 'Never',
-        articlesCount: 0,
-      };
-      setUsers(prev => [...prev, newUser]);
-      toast.success('User created successfully');
+      toast.error('Creating users requires an invitation via Supabase Auth');
     }
 
     setIsDialogOpen(false);
     setEditingUser(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this user?')) {
+      try {
+        await api.profiles.delete(id);
+      } catch (e) { console.error(e); }
       setUsers(prev => prev.filter(user => user.id !== id));
-      toast.success('User deleted successfully');
+      toast.success('User removed');
     }
   };
 
-  const handleToggleStatus = (id: string) => {
-    setUsers(prev =>
-      prev.map(user =>
-        user.id === id 
-          ? { ...user, status: user.status === 'active' ? 'inactive' : 'active' }
-          : user
-      )
-    );
+  const handleToggleStatus = async (id: string) => {
+    const target = users.find(u => u.id === id);
+    if (!target) return;
+    const nextStatus = target.status === 'active' ? 'inactive' : 'active';
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: nextStatus } : u));
+    try { await api.profiles.update(id, { status: nextStatus } as any); } catch (e) { console.error(e); }
   };
 
-  const handleResetPassword = (user: CMSUser) => {
-    toast.success(`Password reset link sent to ${user.email}`);
+  const handleResetPassword = async (user: CMSUser) => {
+    try { await api.auth.resetPassword(user.email); toast.success(`Reset link sent to ${user.email}`); }
+    catch (e) { console.error(e); toast.error('Failed to send reset link'); }
   };
 
   const getRoleBadgeColor = (role: string) => {

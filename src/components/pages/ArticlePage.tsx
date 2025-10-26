@@ -8,6 +8,29 @@ import { Link, useRouter } from '../Router';
 import { Calendar, Clock, User, Bookmark, Type, Sun, Moon } from 'lucide-react';
 import { api } from '../../lib/api';
 
+function sanitizeHtml(html: string) {
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // remove scripts
+    doc.querySelectorAll('script, iframe[src^="javascript:"]').forEach((el) => el.remove());
+    // remove event handlers and javascript: links
+    doc.querySelectorAll('*').forEach((el) => {
+      // @ts-ignore
+      for (const attr of Array.from(el.attributes)) {
+        const n = attr.name.toLowerCase();
+        const v = String(attr.value || '').toLowerCase();
+        if (n.startsWith('on') || v.startsWith('javascript:')) {
+          // @ts-ignore
+          el.removeAttribute(attr.name);
+        }
+      }
+    });
+    return doc.body.innerHTML || '';
+  } catch {
+    return '';
+  }
+}
+
 interface ArticlePageProps {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
@@ -168,7 +191,7 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
             {/* Article Content */}
             <div className={`px-6 pb-6 prose prose-lg max-w-none dark:prose-invert ${fontSizeClasses[fontSize]}`}>
               <div 
-                dangerouslySetInnerHTML={{ __html: article?.content || '' }}
+                dangerouslySetInnerHTML={{ __html: article?.content ? sanitizeHtml(article.content) : '' }}
                 className="leading-relaxed"
               />
             </div>

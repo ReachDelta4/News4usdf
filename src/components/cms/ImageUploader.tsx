@@ -7,6 +7,7 @@ import {
   Upload, X, RotateCw, Crop, ZoomIn, ZoomOut, Sun, Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { api } from '../../lib/api';
 
 interface ImageUploaderProps {
   onImageSelect: (imageUrl: string) => void;
@@ -21,20 +22,32 @@ export function ImageUploader({ onImageSelect, currentImage }: ImageUploaderProp
   const [zoom, setZoom] = useState(100);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         toast.error('Image size must be less than 5MB');
         return;
       }
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
+      try {
+        const path = `${Date.now()}_${file.name}`;
+        const { publicUrl } = await api.storage.uploadFile('media', path, file);
+        await api.mediaFiles.create({
+          title: file.name,
+          alt_text: 'article image',
+          file_url: publicUrl,
+          storage_path: path,
+          file_type: 'article',
+          mime_type: file.type,
+          file_size: file.size,
+        } as any);
+        setImage(publicUrl);
+        onImageSelect(publicUrl);
         toast.success('Image uploaded successfully');
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to upload image');
+      }
     }
   };
 
@@ -43,18 +56,31 @@ export function ImageUploader({ onImageSelect, currentImage }: ImageUploaderProp
     e.stopPropagation();
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     const file = e.dataTransfer.files?.[0];
     if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
+      try {
+        const path = `${Date.now()}_${file.name}`;
+        const { publicUrl } = await api.storage.uploadFile('media', path, file);
+        await api.mediaFiles.create({
+          title: file.name,
+          alt_text: 'article image',
+          file_url: publicUrl,
+          storage_path: path,
+          file_type: 'article',
+          mime_type: file.type,
+          file_size: file.size,
+        } as any);
+        setImage(publicUrl);
+        onImageSelect(publicUrl);
         toast.success('Image uploaded successfully');
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to upload image');
+      }
     }
   };
 
