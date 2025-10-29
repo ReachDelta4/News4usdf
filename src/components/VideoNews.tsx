@@ -75,7 +75,8 @@ export function VideoNews() {
         const configured = await api.settings.get<any[]>('video_news');
         if (Array.isArray(configured) && configured.length) {
           const safe = configured.filter((v) => v.visible !== false);
-          setVideoNews(safe.map((v, i) => ({ id: i + 1, ...v })));
+          const sorted = safe.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+          setVideoNews(sorted.map((v, i) => ({ id: i + 1, ...v })));
         }
       } catch (e) { console.error(e); }
     })();

@@ -17,6 +17,7 @@ import { AdminDashboard } from "./components/pages/AdminDashboard";
 import { AuthPage } from "./components/pages/AuthPage";
 import { AboutPage } from "./components/pages/AboutPage";
 import { EPaperPage } from "./components/pages/EPaperPage";
+import { SUPABASE_MISSING_CONFIG } from "./lib/supabase";
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -26,6 +27,23 @@ export default function App() {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark');
   };
+
+  if (SUPABASE_MISSING_CONFIG) {
+    return (
+      <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-6`}>
+        <div className="max-w-xl w-full bg-white dark:bg-gray-800 rounded-xl shadow p-6 space-y-3">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Configuration Required</h1>
+          <p className="text-gray-700 dark:text-gray-300">
+            Supabase environment variables are missing. Please set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in your environment or <code>.env</code> file and rebuild.
+          </p>
+          <ul className="list-disc pl-5 text-gray-700 dark:text-gray-300">
+            <li>VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co</li>
+            <li>VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Router>

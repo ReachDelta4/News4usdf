@@ -1,13 +1,26 @@
-import React, { useState } from 'react';
-import { ImageWithFallback } from './figma/ImageWithFallback';
+import React, { useEffect, useState } from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from "./ui/button";
+import { VideoPlayer } from './VideoPlayer';
+import { api } from '../lib/api';
 
 export function LiveVideoFloat() {
   const [isVisible, setIsVisible] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [mini, setMini] = useState<null | { videoId: string; title: string; isLive?: boolean }>(null);
 
-  if (!isVisible) return null;
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.settings.get<any[]>('video_news');
+        const chosen = Array.isArray(list) ? list.find(v => v.miniPlayer) : null;
+        if (chosen && chosen.videoId) setMini({ videoId: chosen.videoId, title: chosen.title || 'Live', isLive: !!chosen.isLive });
+        else setMini(null);
+      } catch {}
+    })();
+  }, []);
+
+  if (!isVisible || !mini) return null;
 
   return (
     <div className={`fixed bottom-4 right-4 z-50 transition-all duration-300 ${
@@ -44,21 +57,7 @@ export function LiveVideoFloat() {
 
         {/* Video Content */}
         <div className="relative w-full h-full">
-          <ImageWithFallback
-            src="https://images.unsplash.com/photo-1650984661525-7e6b1b874e47?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmVha2luZyUyMG5ld3MlMjBuZXdzcm9vbXxlbnwxfHx8fDE3NTgwMTA4Nzd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
-            alt="Live News Stream"
-            className="w-full h-full object-cover"
-          />
-          
-          {/* Video overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-          
-          {/* Video info */}
-          <div className="absolute bottom-2 left-2 right-2">
-            <h4 className="text-white text-sm font-medium line-clamp-2">
-              Breaking: Global Climate Summit Live Coverage
-            </h4>
-          </div>
+          <VideoPlayer videoId={mini.videoId} title={mini.title} isLive={mini.isLive} autoPlay className="w-full h-full" />
         </div>
       </div>
     </div>

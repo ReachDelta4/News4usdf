@@ -16,23 +16,7 @@ export function Sidebar() {
     { symbol: 'BITCOIN', value: '$45,678', change: '+2.1%', isPositive: true }
   ];
 
-  const youtubeVideos = [
-    {
-      title: "Breaking: Global Climate Summit Updates",
-      thumbnail: "https://images.unsplash.com/photo-1650984661525-7e6b1b874e47?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmVha2luZyUyMG5ld3MlMjBuZXdzcm9vbXxlbnwxfHx8fDE3NTgwMTA4Nzd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      duration: "12:34"
-    },
-    {
-      title: "Tech Market Analysis Today",
-      thumbnail: "https://images.unsplash.com/photo-1645226880663-81561dcab0ae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMHN0b2NrJTIwbWFya2V0JTIwY2hhcnRzfGVufDF8fHx8MTc1ODAxMDg3N3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      duration: "8:45"
-    },
-    {
-      title: "Healthcare Breakthrough Report",
-      thumbnail: "https://images.unsplash.com/photo-1618498082410-b4aa22193b38?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxoZWFsdGhjYXJlJTIwbWVkaWNhbCUyMG5ld3N8ZW58MXx8fHwxNzU4MDEwODc2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      duration: "15:20"
-    }
-  ];
+  const [youtubeVideos, setYoutubeVideos] = useState<any[]>([]);
 
   const [trendingArticles, setTrendingArticles] = useState<string[]>([
     "Economic reforms reshape global markets",
@@ -49,6 +33,11 @@ export function Sidebar() {
         const top = (rows || []).sort((a: any, b: any) => (b.views || 0) - (a.views || 0)).slice(0, 5);
         const titles = top.map((r: any) => r.title).filter(Boolean);
         if (titles.length) setTrendingArticles(titles);
+        const configured = await api.settings.get<any[]>('video_news');
+        if (Array.isArray(configured)) {
+          const vids = configured.filter(v => v.visible !== false).sort((a,b)=> (b.addedAt||'').localeCompare(a.addedAt||''));
+          setYoutubeVideos(vids.slice(0,3));
+        }
       } catch (e) { console.error(e); }
     })();
   }, []);

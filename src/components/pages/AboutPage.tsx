@@ -2,9 +2,10 @@ import React from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '../ui/breadcrumb';
 import { Link } from '../Router';
 import { Users, Mail, Phone, Globe, Youtube, Twitter, Facebook } from 'lucide-react';
+import { api } from '../../lib/api';
 
 export function AboutPage() {
-  const teamMembers = [
+  const defaults = [
     {
       name: "Dr. B. M. Sivaprasad",
       role: "CEO & Editor-in-Chief",
@@ -27,6 +28,15 @@ export function AboutPage() {
       image: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop"
     }
   ];
+  const [teamMembers, setTeamMembers] = React.useState(defaults);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const saved = await api.settings.get<any[]>('leadership_team');
+        if (Array.isArray(saved) && saved.length === 3) setTeamMembers(saved);
+      } catch {}
+    })();
+  }, []);
 
   const socialLinks = [
     {

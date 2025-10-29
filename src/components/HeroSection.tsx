@@ -18,6 +18,8 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
     timeAgo: '2 hours ago'
   });
   const [trending, setTrending] = useState<any[]>([]);
+  const [bannerUrls, setBannerUrls] = useState<string[]>([]);
+  const [bannerIndex, setBannerIndex] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -25,14 +27,19 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
         // Get a featured article or latest published
         let rows = await api.articles.getAll({ status: 'published', featured: true, limit: 1 });
         if (!rows || rows.length === 0) rows = await api.articles.getAll({ status: 'published', limit: 1 });
-        const banners = await api.mediaFiles.getAll('banner');
-        const bannerUrl = (banners && banners[0]?.file_url) || null;
+        const [banners, countSetting] = await Promise.all([
+          api.mediaFiles.getAll('banner'),
+          api.settings.get<number>('homepage_banner_count'),
+        ]);
+        const count = typeof countSetting === 'number' && countSetting > 0 ? countSetting : 1;
+        const selected = (banners || []).slice(0, count).map((b: any) => b.file_url).filter(Boolean);
+        setBannerUrls(selected);
         const a = rows && rows[0];
         if (a) {
           setFeatured({
             title: a.title,
             summary: a.summary || '',
-            imageUrl: bannerUrl || a.featured_image_url || featured.imageUrl,
+            imageUrl: (selected[0] || a.featured_image_url || featured.imageUrl),
             category: ((a as any).categories?.name || 'NEWS').toUpperCase(),
             timeAgo: a.publish_date ? new Date(a.publish_date).toLocaleString() : 'Recently'
           });
@@ -40,6 +47,7 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
         const many = await api.articles.getAll({ status: 'published', limit: 12 });
         const sorted = (many || []).sort((x: any, y: any) => (y.views || 0) - (x.views || 0)).slice(0, 3);
         setTrending(sorted.map((r: any) => ({
+          id: String(r.id),
           title: r.title,
           summary: r.summary || '',
           imageUrl: r.featured_image_url || featured.imageUrl,
@@ -51,6 +59,20 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
       }
     })();
   }, []);
+
+  // Rotate banners if multiple
+  useEffect(() => {
+    if (!bannerUrls.length) return;
+    setBannerIndex(0);
+    const id = setInterval(() => {
+      setBannerIndex((i) => {
+        const next = (i + 1) % bannerUrls.length;
+        setFeatured((f) => ({ ...f, imageUrl: bannerUrls[next] || f.imageUrl }));
+        return next;
+      });
+    }, 6000);
+    return () => clearInterval(id);
+  }, [bannerUrls.length]);
 
   return (
     <section className="max-w-7xl mx-auto px-4 py-8">
@@ -102,9 +124,10 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
         {/* Trending Stories */}
         <div className="space-y-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Trending Now</h2>
-          {(trending.length ? trending : []).map((story, index) => (
+          {(trending.length ? trending : []).map((story: any, index) => (
             <NewsCard
               key={index}
+              id={story.id}
               title={story.title}
               summary={story.summary}
               imageUrl={story.imageUrl}

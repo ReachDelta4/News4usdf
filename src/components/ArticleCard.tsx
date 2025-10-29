@@ -1,7 +1,7 @@
 import React from 'react';
 import { Clock, User } from 'lucide-react';
 import { SocialShare } from './SocialShare';
-import { Link } from './Router';
+import { useRouter } from './Router';
 
 interface Article {
   id: string;
@@ -22,6 +22,7 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ article, isQuickRead = false, variant = 'card', className = '' }: ArticleCardProps) {
+  const { navigate } = useRouter();
   const getCategoryColor = (category: string) => {
     switch (category.toLowerCase()) {
       case 'politics': return 'border-red-500 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400';
@@ -39,9 +40,29 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
     "Future implications outlined"
   ] : [];
 
+  const handleNavigate = (e: React.MouseEvent | React.KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target && target.closest('button, a, [data-interactive], [role="button"]')) return;
+    navigate('/article', { id: article.id });
+  };
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleNavigate(e);
+    }
+  };
+
   if (variant === 'list') {
     return (
-      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow ${className}`}>
+      <div
+        className={`group bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-all duration-200 cursor-pointer hover:-translate-y-0.5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 ${className}`}
+        role="link"
+        tabIndex={0}
+        aria-label={article.title}
+        onClick={handleNavigate}
+        onKeyDown={handleKey}
+      >
         <div className="flex flex-col md:flex-row">
           <div className="md:w-1/3">
             <div className="aspect-video md:aspect-square md:h-48">
@@ -65,11 +86,9 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
               />
             </div>
             
-            <Link to="/article" params={{ id: article.id }}>
-              <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white hover:text-red-600 dark:hover:text-red-400 transition-colors line-clamp-2">
-                {article.title}
-              </h3>
-            </Link>
+            <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors line-clamp-2">
+              {article.title}
+            </h3>
             
             {isQuickRead ? (
               <ul className="space-y-1 mb-4">
@@ -110,7 +129,14 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
   }
 
   return (
-    <div className={`group bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 ${className}`}>
+    <div
+      className={`group bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-all duration-200 cursor-pointer hover:-translate-y-0.5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 ${className}`}
+      role="link"
+      tabIndex={0}
+      aria-label={article.title}
+      onClick={handleNavigate}
+      onKeyDown={handleKey}
+    >
       <div className="relative">
         <div className="aspect-video">
           <img 
@@ -135,11 +161,9 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
       </div>
       
       <div className="p-4">
-        <Link to="/article" params={{ id: article.id }}>
-          <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white hover:text-red-600 dark:hover:text-red-400 transition-colors line-clamp-2">
-            {article.title}
-          </h3>
-        </Link>
+        <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors line-clamp-2">
+          {article.title}
+        </h3>
         
         {isQuickRead ? (
           <ul className="space-y-1 mb-4">

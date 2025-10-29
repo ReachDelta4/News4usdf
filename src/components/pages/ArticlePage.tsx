@@ -189,7 +189,7 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
             </div>
 
             {/* Article Content */}
-            <div className={`px-6 pb-6 prose prose-lg max-w-none dark:prose-invert ${fontSizeClasses[fontSize]}`}>
+            <div className={`px-6 pb-6 prose prose-lg max-w-none dark:prose-invert ${fontSizeClasses[fontSize]}`} dir="ltr">
               <div 
                 dangerouslySetInnerHTML={{ __html: article?.content ? sanitizeHtml(article.content) : '' }}
                 className="leading-relaxed"

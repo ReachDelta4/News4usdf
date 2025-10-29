@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { 
   Upload, Trash2, Edit, Image as ImageIcon, User, 
-  Newspaper, Tag, LayoutGrid, Save, X 
+  LayoutGrid, Save, X 
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { ImageUploader } from './ImageUploader';
 import { api } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 
 interface ImageItem {
   id: string;
@@ -30,19 +31,78 @@ export function ImageManager() {
   const [editForm, setEditForm] = useState({ title: '', alt: '' });
   const [showUploader, setShowUploader] = useState(false);
   const [uploadCategory, setUploadCategory] = useState<ImageItem['category']>('article');
+const [logoUrl, setLogoUrl] = useState<string>('');
+const [faviconUrl, setFaviconUrl] = useState<string>('');
+const [leaderTeam, setLeaderTeam] = useState<Array<{ name: string; role: string; qualification: string; specialty: string; image: string }>>([
+  { name: 'Dr. B. M. Sivaprasad', role: 'CEO & Editor-in-Chief', qualification: 'PhD (Journalism), MJMC, MBA', specialty: 'Journalism Leadership', image: '' },
+  { name: 'B. T. Vijay Kumar', role: 'Andhra Pradesh Head', qualification: 'MA', specialty: 'Regional Affairs', image: '' },
+  { name: 'S. Bhavesh', role: 'Lead Developer', qualification: 'B.Tech', specialty: 'Technology & Innovation', image: '' },
+]);
+const [pickerOpen, setPickerOpen] = useState<{ type: 'logo' | 'favicon' | 'leader' | null; index?: number }>({ type: null });
 
-  useEffect(() => {
+useEffect(() => {
     (async () => {
       try {
         const rows = await api.mediaFiles.getAll();
-        setImages((rows || []).map((r: any) => ({
+        let mapped: ImageItem[] = (rows || []).map((r: any) => ({
           id: r.id,
           url: r.file_url,
           title: r.title,
           category: (r.file_type || 'article') as ImageItem['category'],
           uploadDate: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : '',
           alt: r.alt_text || ''
-        })));
+        }));
+
+        // Fallback: if no rows in media_files, list public files from the 'media' bucket
+        if (!mapped.length) {
+          const { data: files, error } = await supabase.storage.from('media').list('', { limit: 100 });
+          if (!error && Array.isArray(files)) {
+            mapped = files
+              .filter((f: any) => typeof f?.name === 'string')
+              .map((f: any, idx: number) => {
+                const name = f.name as string;
+                const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(name);
+                // naive category inference by filename
+                const lower = name.toLowerCase();
+                const inferred: ImageItem['category'] = lower.includes('logo')
+                  ? 'logo' : lower.includes('banner')
+                  ? 'banner' : lower.includes('leader')
+                  ? 'leadership' : lower.includes('category')
+                  ? 'category' : 'article';
+                return {
+                  id: `media:${idx}:${name}`,
+                  url: publicUrl,
+                  title: name,
+                  category: inferred,
+                  uploadDate: new Date().toISOString().split('T')[0],
+                  alt: name,
+                } as ImageItem;
+              });
+          }
+        }
+
+        setImages(mapped);
+        try {
+          const [siteLogo, fav, leaders] = await Promise.all([
+            api.settings.get<string>("site_logo_url"),
+            api.settings.get<string>("favicon_url"),
+            api.settings.get<any[]>("leadership_team"),
+          ]);
+          if (siteLogo) setLogoUrl(siteLogo);
+          if (fav) setFaviconUrl(fav);
+          if (Array.isArray(leaders) && leaders.length === 3) setLeaderTeam(leaders);
+        } catch {}
+
+        try {
+          const [siteLogo, fav, leaders] = await Promise.all([
+            api.settings.get<string>('site_logo_url'),
+            api.settings.get<string>('favicon_url'),
+            api.settings.get<any[]>('leadership_team'),
+          ]);
+          if (siteLogo) setLogoUrl(siteLogo);
+          if (fav) setFaviconUrl(fav);
+          if (Array.isArray(leaders) && leaders.length === 3) setLeaderTeam(leaders);
+        } catch {}
       } catch (e) {
         console.error(e);
       }
@@ -82,22 +142,41 @@ export function ImageManager() {
     }
   };
 
+    async function resizeImage(file: File, maxDim = 1600): Promise<File> {
+    try {
+      const img = document.createElement('img');
+      const url = URL.createObjectURL(file);
+      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject; img.src = url; });
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('No ctx');
+      ctx.drawImage(img, 0, 0, w, h);
+      const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      const blob: Blob = await new Promise((res) => canvas.toBlob((b)=>res(b as Blob), mime, 0.85));
+      URL.revokeObjectURL(url);
+      return new File([blob], file.name.replace(/\.(png|jpe?g)$/i, mime === 'image/png' ? '.png' : '.jpg'), { type: mime });
+    } catch { return file; }
+  }
   const handleFileChosen = async (file: File) => {
     try {
       if (!file.type.startsWith('image/')) {
         toast.error('Please select an image file');
         return;
       }
-      const path = `${Date.now()}_${file.name}`;
-      const { publicUrl } = await api.storage.uploadFile('media', path, file);
+      const resized = await resizeImage(file, 1600);
+      const path = `${Date.now()}_${resized.name}`;
+      const { publicUrl } = await api.storage.uploadFile('media', path, resized);
       const created = await api.mediaFiles.create({
-        title: file.name,
+        title: resized.name,
         alt_text: `${uploadCategory} image`,
         file_url: publicUrl,
         storage_path: path,
         file_type: uploadCategory,
-        mime_type: file.type,
-        file_size: file.size,
+        mime_type: resized.type,
+        file_size: resized.size,
       } as any);
       const newImage: ImageItem = {
         id: created.id,
@@ -185,7 +264,7 @@ export function ImageManager() {
       </div>
 
       <Tabs defaultValue="all" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="all" className="flex items-center gap-2">
             <LayoutGrid className="w-4 h-4" />
             <span className="hidden sm:inline">All</span>
@@ -298,19 +377,44 @@ export function ImageManager() {
         </TabsContent>
 
         {/* Logo Management */}
-        <TabsContent value="logo" className="space-y-4">
+                <TabsContent value="logo" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Site Logo</CardTitle>
-              <CardDescription>
-                Manage NEWS4US brand logo and variations
-              </CardDescription>
+              <CardTitle>Logo & Favicon</CardTitle>
+              <CardDescription>Change the site logo and favicon from here</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filterImagesByCategory('logo').map(image => (
-                  <ImageCard key={image.id} image={image} />
-                ))}
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Site Logo</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input value={logoUrl} onChange={(e)=>setLogoUrl(e.target.value)} placeholder="https://..." />
+                    <Button variant="outline" onClick={()=> setPickerOpen({ type: 'logo' })}>Browse</Button>
+                  </div>
+                  {logoUrl && <img src={logoUrl} alt="Logo preview" className="h-12 mt-2 object-contain" />}
+                </div>
+                <div>
+                  <Label>Favicon</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input value={faviconUrl} onChange={(e)=>setFaviconUrl(e.target.value)} placeholder="https://..." />
+                    <Button variant="outline" onClick={()=> setPickerOpen({ type: 'favicon' })}>Browse</Button>
+                  </div>
+                  {faviconUrl && <img src={faviconUrl} alt="Favicon preview" className="h-10 mt-2 object-contain" />}
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button className="bg-red-600 hover:bg-red-700" onClick={async ()=>{ await Promise.all([
+                  api.settings.upsert('site_logo_url', logoUrl),
+                  api.settings.upsert('favicon_url', faviconUrl),
+                ]); toast.success('Brand updated'); }}>Save</Button>
+              </div>
+              <div>
+                <Label>All Logo Images</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                  {filterImagesByCategory('logo').map(image => (
+                    <ImageCard key={image.id} image={image} />
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -415,9 +519,9 @@ export function ImageManager() {
                   className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option value="leadership">Leadership Profile</option>
-                  <option value="banner">Homepage Banner</option>
+                  
                   <option value="article">Article Thumbnail</option>
-                  <option value="category">Category Cover</option>
+                  
                   <option value="logo">Site Logo</option>
                 </select>
               </div>
@@ -430,3 +534,17 @@ export function ImageManager() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

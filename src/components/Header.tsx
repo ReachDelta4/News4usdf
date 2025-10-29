@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Menu, X, Moon, Sun, Newspaper } from 'lucide-react';
 import { Link, useRouter } from './Router';
 import newsLogo from 'figma:asset/46a273f432049c736ccfb63a159ffee93dbd7bdf.png';
-import brandImage from 'figma:asset/e465bbd90453757b67bdbd6f68b53e083c3b6284.png';
+import { api } from '../lib/api';
 
 interface HeaderProps {
   isDarkMode: boolean;
@@ -24,6 +24,16 @@ const NAVIGATION_ITEMS = [
 export function Header({ isDarkMode, toggleDarkMode }: HeaderProps) {
   const { currentRoute } = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const url = await api.settings.get<string>('site_logo_url');
+        if (url) setLogoUrl(url);
+      } catch {}
+    })();
+  }, []);
 
   return (
     <header className="bg-white dark:bg-gray-900 shadow-md relative z-50">
@@ -32,7 +42,7 @@ export function Header({ isDarkMode, toggleDarkMode }: HeaderProps) {
           {/* Left: Logo Section - Always visible */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             <img 
-              src={newsLogo} 
+              src={logoUrl || newsLogo} 
               alt="NEWS4US Official Logo" 
               className="h-8 sm:h-10 w-auto object-contain flex-shrink-0"
             />
@@ -66,31 +76,8 @@ export function Header({ isDarkMode, toggleDarkMode }: HeaderProps) {
             </div>
           </nav>
 
-          {/* Right: Controls and Brand */}
+          {/* Right: Controls */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Brand/Sponsor Section - Hidden on smaller screens */}
-            <div className="hidden xl:flex items-center space-x-3">
-              <img 
-                src={brandImage} 
-                alt="NEWS4US Brand Image" 
-                className="h-8 w-auto object-contain"
-              />
-              <div className="flex items-center space-x-1">
-                <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">f</span>
-                </div>
-                <div className="w-5 h-5 bg-black rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">X</span>
-                </div>
-                <div className="w-5 h-5 bg-blue-700 rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">in</span>
-                </div>
-                <div className="w-5 h-5 bg-red-600 rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">▶</span>
-                </div>
-              </div>
-            </div>
-
             {/* Dark Mode Toggle */}
             <Button
               variant="ghost"

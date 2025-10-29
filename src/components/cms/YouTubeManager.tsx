@@ -32,6 +32,8 @@ interface YouTubeVideo {
   category: string;
   visible: boolean;
   views: number;
+  miniPlayer?: boolean;
+  addedAt?: string;
 }
 
 export function YouTubeManager() {
@@ -51,8 +53,11 @@ export function YouTubeManager() {
             category: v.category ?? 'General',
             visible: v.visible !== false,
             views: typeof v.views === 'number' ? v.views : 0,
+            miniPlayer: v.miniPlayer === true,
+            addedAt: v.addedAt ?? new Date().toISOString(),
           }));
-          setVideos(mapped);
+          // Latest first by addedAt
+          setVideos(mapped.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || '')));
         }
       } catch (e) { console.error(e); }
     })();
@@ -101,6 +106,8 @@ export function YouTubeManager() {
         category: v.category,
         visible: v.visible,
         views: v.views,
+        miniPlayer: v.miniPlayer === true,
+        addedAt: v.addedAt ?? new Date().toISOString(),
       }));
       await api.settings.upsert('video_news', payload);
     } catch (e) { console.error(e); }
@@ -124,6 +131,7 @@ export function YouTubeManager() {
       ...editingVideo,
       videoId,
       thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      addedAt: editingVideo.addedAt ?? new Date().toISOString(),
     };
 
     if (editingVideo.id) {
@@ -160,6 +168,26 @@ export function YouTubeManager() {
     const next = videos.map(video =>
       video.id === id ? { ...video, visible: !video.visible } : video
     );
+    setVideos(next);
+    await persist(next);
+  };
+
+  const handleToggleMiniPlayer = async (id: string) => {
+    let hadMini = false;
+    const next = videos.map(v => {
+      if (v.id === id) {
+        if (!v.miniPlayer) hadMini = videos.some(x => x.miniPlayer);
+        return { ...v, miniPlayer: true };
+      }
+      return { ...v, miniPlayer: false };
+    });
+    setVideos(next);
+    await persist(next);
+    if (hadMini) toast.warning('Mini player video replaced with the newly selected one');
+  };
+
+  const handleDisableMiniPlayer = async () => {
+    const next = videos.map(v => ({ ...v, miniPlayer: false }));
     setVideos(next);
     await persist(next);
   };
@@ -376,28 +404,39 @@ export function YouTubeManager() {
                   </Button>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setEditingVideo(video);
-                      setIsDialogOpen(true);
-                    }}
-                    className="flex-1"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(video.id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor={`mini-${video.id}`}>Mini Player</Label>
+                  <Switch
+                    id={`mini-${video.id}`}
+                    checked={video.miniPlayer === true}
+                    onCheckedChange={(checked) => checked ? handleToggleMiniPlayer(video.id) : handleDisableMiniPlayer()}
+                  />
                 </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditingVideo(video);
+                    setIsDialogOpen(true);
+                  }}
+                  className="flex-1"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDelete(video.id)}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
               </CardContent>
             </Card>
           </div>

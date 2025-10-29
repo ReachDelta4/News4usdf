@@ -5,6 +5,7 @@ interface CategorySectionProps {
   title: string;
   highlightColor: string;
   articles: Array<{
+    id: string;
     title: string;
     summary: string;
     imageUrl: string;
@@ -34,6 +35,7 @@ export function CategorySection({ title, highlightColor, articles, isQuickRead }
         {articles.map((article, index) => (
           <NewsCard
             key={index}
+            id={article.id}
             title={article.title}
             summary={article.summary}
             imageUrl={article.imageUrl}

@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Switch } from '../ui/switch';
 import { Separator } from '../ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -64,20 +65,24 @@ export function SettingsPanel() {
   const [breakingNewsText, setBreakingNewsText] = useState('');
   const [videoNewsJson, setVideoNewsJson] = useState('');
   const [bannerCount, setBannerCount] = useState<number>(3);
+  const [showLogoPicker, setShowLogoPicker] = useState(false);
+  const [logoChoices, setLogoChoices] = useState<Array<{ id: string; url: string }>>([]);
 
   React.useEffect(() => {
     (async () => {
       try {
-        const [breaking, videos, banners] = await Promise.all([
+        const [breaking, videos, banners, siteLogo, favicon] = await Promise.all([
           api.settings.get<string[]>('breaking_news'),
           api.settings.get<any[]>('video_news'),
-          api.settings.get<number>('homepage_banner_count')
+          api.settings.get<number>('homepage_banner_count'),
+          api.settings.get<string>('site_logo_url'),
+          api.settings.get<string>('favicon_url'),
         ]);
         if (Array.isArray(breaking)) setBreakingNewsText(breaking.join('\n'));
-        if (videos) {
-          try { setVideoNewsJson(JSON.stringify(videos, null, 2)); } catch {}
-        }
+        if (videos) { try { setVideoNewsJson(JSON.stringify(videos, null, 2)); } catch {} }
         if (typeof banners === 'number') setBannerCount(banners);
+        if (siteLogo) setSettings((s) => ({ ...s, logoUrl: siteLogo }));
+        if (favicon) setSettings((s) => ({ ...s, faviconUrl: favicon }));
       } catch (e) {
         console.error(e);
       }
@@ -95,6 +100,8 @@ export function SettingsPanel() {
         await api.settings.upsert('video_news', []);
       }
       await api.settings.upsert('homepage_banner_count', bannerCount);
+      if (settings.logoUrl) await api.settings.upsert('site_logo_url', settings.logoUrl);
+      if (settings.faviconUrl) await api.settings.upsert('favicon_url', settings.faviconUrl);
       toast.success('Settings saved successfully');
     } catch (e) {
       console.error(e);
@@ -302,7 +309,14 @@ export function SettingsPanel() {
                   <Button 
                     variant="outline"
                     className="flex-shrink-0"
-                    onClick={() => toast.info('Navigate to Images tab to upload logo')}
+                    onClick={async () => {
+                      try {
+                        const rows = await api.mediaFiles.getAll('logo');
+                        const choices = (rows || []).map((r: any) => ({ id: r.id, url: r.file_url }));
+                        setLogoChoices(choices);
+                        setShowLogoPicker(true);
+                      } catch (e) { console.error(e); }
+                    }}
                   >
                     <ImageIcon className="w-4 h-4 mr-2" />
                     Browse
@@ -397,6 +411,30 @@ export function SettingsPanel() {
             </CardContent>
           </Card>
         </TabsContent>
+        <Dialog open={showLogoPicker} onOpenChange={setShowLogoPicker}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Select a Logo</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {logoChoices.map((lc) => (
+                <button
+                  key={lc.id}
+                  onClick={() => {
+                    setSettings((s) => ({ ...s, logoUrl: lc.url }));
+                    setShowLogoPicker(false);
+                  }}
+                  className="border rounded overflow-hidden hover:ring-2 ring-red-500 bg-white"
+                >
+                  <img src={lc.url} alt="logo option" className="w-full h-24 object-contain" />
+                </button>
+              ))}
+              {logoChoices.length === 0 && (
+                <div className="text-sm text-gray-500">No logo images found. Upload in Images tab (category: logo).</div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Homepage */}
         <TabsContent value="homepage" className="space-y-4">

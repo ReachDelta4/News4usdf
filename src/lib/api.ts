@@ -35,7 +35,8 @@ export const api = {
           users (id, name, email),
           article_tags ( tags ( name ) )
         `)
-        .order('created_at', { ascending: false });
+        // Latest first by publish_date when available, otherwise fallback naturally
+        .order('publish_date', { ascending: false, nullsFirst: false });
 
       if (filters?.status) {
         query = query.eq('status', filters.status);
@@ -491,7 +492,7 @@ export const api = {
     async upsert(key: string, value: any, description?: string) {
       const { data, error } = await supabase
         .from('site_settings')
-        .upsert({ key, value, description })
+        .upsert({ key, value, description }, { onConflict: 'key' })
         .select()
         .single();
       if (error) throw error;

@@ -144,6 +144,8 @@ export function RichTextEditor({ value, onChange, placeholder, onAutoSave }: Ric
         <div 
           className="p-4 min-h-[400px] prose dark:prose-invert max-w-none overflow-auto"
           dangerouslySetInnerHTML={{ __html: value }}
+          dir="ltr"
+          style={{ unicodeBidi: 'plaintext' as any }}
         />
       ) : (
         <div
@@ -155,6 +157,8 @@ export function RichTextEditor({ value, onChange, placeholder, onAutoSave }: Ric
           data-placeholder={placeholder}
           style={{
             minHeight: '400px',
+            direction: 'ltr',
+            unicodeBidi: 'plaintext' as any,
           }}
         />
       )}
