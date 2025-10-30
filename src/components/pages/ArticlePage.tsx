@@ -37,37 +37,69 @@ interface ArticlePageProps {
 }
 
 export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
-  const { params } = useRouter();
+  const { params, navigate } = useRouter();
   const [fontSize, setFontSize] = useState<'small' | 'base' | 'large' | 'xl'>('base');
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [article, setArticle] = useState<any | null>(null);
   const [related, setRelated] = useState<any[]>([]);
 
+  const pathSlugOrId = useMemo(() => {
+    try {
+      const path = window.location?.pathname || '';
+      const parts = path.split('/').filter(Boolean);
+      if (parts[0] === 'article' && parts[1]) return parts[1];
+      return '';
+    } catch { return ''; }
+  }, []);
+
   const idNum = useMemo(() => {
-    const raw = params.id;
+    const raw = params.id || (pathSlugOrId && /^\d+$/.test(pathSlugOrId) ? pathSlugOrId : '');
     const parsed = raw ? parseInt(raw, 10) : NaN;
     return Number.isFinite(parsed) ? parsed : null;
-  }, [params.id]);
+  }, [params.id, pathSlugOrId]);
+  const slugStr = useMemo(() => {
+    const s = params.slug || (pathSlugOrId && !/^\d+$/.test(pathSlugOrId) ? pathSlugOrId : '');
+    return s || '';
+  }, [params.slug, pathSlugOrId]);
 
   useEffect(() => {
     (async () => {
-      if (idNum == null) { setLoading(false); return; }
       try {
-        const row = await api.articles.getById(idNum);
+        let row: any = null;
+        if (slugStr) {
+          row = await api.articles.getBySlug(slugStr);
+          if (!row && /^\d+$/.test(slugStr)) {
+            const id = parseInt(slugStr, 10);
+            row = await api.articles.getById(id);
+          }
+        } else if (idNum != null) {
+          row = await api.articles.getById(idNum);
+        }
         setArticle(row);
         if (row?.category_id) {
           const list = await api.articles.getAll({ status: 'published', category_id: row.category_id, limit: 6 });
-          setRelated((list || []).filter((a) => a.id !== idNum));
+          setRelated((list || []).filter((a) => a.id !== row.id));
         }
-        if (row?.id) api.articles.incrementViews(row.id);
+        if (row?.id) {
+          api.articles.incrementViews(row.id);
+          // Ensure canonical slug URL in address bar
+          try {
+            const current = window.location?.pathname || '';
+            const desired = row.slug ? `/article/${row.slug}` : (row.id ? `/article/${row.id}` : '/article');
+            if (current !== desired) {
+              // Canonicalize URL without triggering Router.navigate (prevents scroll-to-top)
+              window.history.replaceState({ params: { id: String(row.id), slug: row.slug || '' } }, '', desired);
+            }
+          } catch {}
+        }
       } catch (e) {
         console.error(e);
       } finally {
         setLoading(false);
       }
     })();
-  }, [idNum]);
+  }, [idNum, slugStr, navigate]);
 
   const fontSizeClasses = {
     small: 'text-sm',
@@ -169,7 +201,7 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
                   </Button>
 
                   <SocialShare 
-                    url={`/article/${article?.id || ''}`}
+                    url={`/article/${article?.slug || article?.id || ''}`}
                     title={article?.title || ''}
                     variant="button"
                   />
@@ -202,7 +234,7 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
                 <div className="flex items-center space-x-4">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Share this article:</span>
                   <SocialShare 
-                    url={`/article/${article?.id || ''}`}
+                    url={`/article/${article?.slug || article?.id || ''}`}
                     title={article?.title || ''}
                     variant="inline"
                   />
@@ -236,6 +268,7 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
                     timeAgo: ra.publish_date ? new Date(ra.publish_date).toLocaleDateString() : 'Recently',
                     author: (ra as any)?.users?.name || undefined,
                     readTime: ra.read_time ? `${ra.read_time} min read` : undefined,
+                    slug: (ra as any)?.slug || undefined,
                   }}
                 />
               ))}

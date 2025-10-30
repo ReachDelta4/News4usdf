@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { api } from '../../lib/api';
 
 // Import CMS Components
-import { DashboardHome } from '../cms/DashboardHome';
+import { DashboardHome } from '../cms/DashboardHomeWired';
 import { ArticlesPanel } from '../cms/ArticlesPanel';
 import { CategoryManager } from '../cms/CategoryManager';
 import { EPaperManager } from '../cms/EPaperManager';

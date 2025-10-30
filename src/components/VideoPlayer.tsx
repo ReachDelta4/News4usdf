@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { ExternalLink, X, Play } from 'lucide-react';
@@ -13,6 +13,11 @@ interface VideoPlayerProps {
   showModal?: boolean;
   onClose?: () => void;
   className?: string;
+  // When true, render the external link button to open on YouTube
+  showExternalLink?: boolean;
+  // Enable YouTube Iframe API and notify when playback starts at least once
+  enableApi?: boolean;
+  onPlayed?: () => void;
 }
 
 export function VideoPlayer({
@@ -23,14 +28,81 @@ export function VideoPlayer({
   autoPlay = false,
   showModal = false,
   onClose,
-  className = ""
+  className = "",
+  showExternalLink = true,
+  enableApi = false,
+  onPlayed,
 }: VideoPlayerProps) {
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=${autoPlay ? 1 : 0}&mute=0&controls=1&rel=0`;
+  const iframeIdRef = useRef<string>(`yt-${videoId}-${Math.random().toString(36).slice(2)}`);
+
+  const embedUrl = useMemo(() => {
+    const base = `https://www.youtube.com/embed/${videoId}`;
+    const params = new URLSearchParams();
+    params.set('autoplay', autoPlay ? '1' : '0');
+    params.set('mute', '0');
+    params.set('controls', '1');
+    params.set('rel', '0');
+    if (enableApi) {
+      params.set('enablejsapi', '1');
+      try {
+        params.set('origin', window.location.origin);
+      } catch {}
+    }
+    return `${base}?${params.toString()}`;
+  }, [videoId, autoPlay, enableApi]);
+
+  useEffect(() => {
+    if (!enableApi) return;
+
+    let player: any;
+    let playedOnce = false;
+
+    function onYouTubeIframeAPIReady() {
+      // @ts-ignore
+      const YT = (window as any).YT;
+      if (!YT || !YT.Player) return;
+      player = new YT.Player(iframeIdRef.current, {
+        events: {
+          onStateChange: (event: any) => {
+            if (event?.data === 1 && !playedOnce) {
+              playedOnce = true;
+              onPlayed?.();
+            }
+          }
+        }
+      });
+    }
+
+    // @ts-ignore
+    if ((window as any).YT && (window as any).YT.Player) {
+      onYouTubeIframeAPIReady();
+    } else {
+      const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]') as HTMLScriptElement | null;
+      if (!existing) {
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        document.body.appendChild(tag);
+      }
+      // @ts-ignore
+      const prev = (window as any).onYouTubeIframeAPIReady;
+      // @ts-ignore
+      (window as any).onYouTubeIframeAPIReady = () => {
+        try { onYouTubeIframeAPIReady(); } finally {
+          if (typeof prev === 'function') try { prev(); } catch {}
+        }
+      };
+    }
+
+    return () => {
+      try { player?.destroy?.(); } catch {}
+    };
+  }, [enableApi, videoId, onPlayed]);
 
   const VideoContent = () => (
     <div className={`relative bg-black rounded-lg overflow-hidden ${className}`}>
       <AspectRatio ratio={16/9}>
         <iframe
+          id={iframeIdRef.current}
           src={embedUrl}
           title={title}
           className="w-full h-full"
@@ -47,17 +119,19 @@ export function VideoPlayer({
           </div>
         </div>
       )}
-      <div className="absolute top-3 right-3 z-20">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank')}
-          className="bg-black/40 text-white hover:bg-black/60"
-          title="Open in YouTube"
-        >
-          <ExternalLink className="w-4 h-4" />
-        </Button>
-      </div>
+      {showExternalLink && (
+        <div className="absolute top-3 right-3 z-10">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank')}
+            className="bg-black/40 text-white hover:bg-black/60"
+            title="Open in YouTube"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 

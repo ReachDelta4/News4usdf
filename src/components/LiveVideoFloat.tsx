@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from "./ui/button";
 import { VideoPlayer } from './VideoPlayer';
@@ -8,6 +8,8 @@ export function LiveVideoFloat() {
   const [isVisible, setIsVisible] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [mini, setMini] = useState<null | { videoId: string; title: string; isLive?: boolean }>(null);
+  const hasPlayedRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -20,6 +22,27 @@ export function LiveVideoFloat() {
     })();
   }, []);
 
+  // Auto-close if never played within 90 seconds
+  useEffect(() => {
+    if (!mini || !isVisible) return;
+    // reset state
+    hasPlayedRef.current = false;
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    timerRef.current = window.setTimeout(() => {
+      if (!hasPlayedRef.current) setIsVisible(false);
+    }, 90_000);
+
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [mini, isVisible]);
+
   if (!isVisible || !mini) return null;
 
   return (
@@ -28,7 +51,7 @@ export function LiveVideoFloat() {
     }`}>
       <div className="bg-black rounded-lg overflow-hidden shadow-2xl">
         {/* Live Badge */}
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-2 left-2 z-30">
           <div className="bg-red-600 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
             <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
             <span>LIVE NOW</span>
@@ -36,7 +59,7 @@ export function LiveVideoFloat() {
         </div>
 
         {/* Controls */}
-        <div className="absolute top-2 right-2 z-10 flex space-x-1">
+        <div className="absolute top-2 right-2 z-30 flex space-x-1">
           <Button
             variant="ghost"
             size="sm"
@@ -57,7 +80,22 @@ export function LiveVideoFloat() {
 
         {/* Video Content */}
         <div className="relative w-full h-full">
-          <VideoPlayer videoId={mini.videoId} title={mini.title} isLive={mini.isLive} autoPlay className="w-full h-full" />
+          <VideoPlayer
+            videoId={mini.videoId}
+            title={mini.title}
+            isLive={mini.isLive}
+            autoPlay
+            className="w-full h-full"
+            showExternalLink={false}
+            enableApi
+            onPlayed={() => {
+              hasPlayedRef.current = true;
+              if (timerRef.current) {
+                window.clearTimeout(timerRef.current);
+                timerRef.current = null;
+              }
+            }}
+          />
         </div>
       </div>
     </div>

@@ -29,6 +29,7 @@ export function HomePage({ isDarkMode, isQuickRead, setIsQuickRead }: HomePagePr
     timeAgo: a.publish_date ? timeAgo(new Date(a.publish_date)) : 'Just now',
     author: (a as any).users?.name || undefined,
     readTime: a.read_time ? `${a.read_time} min read` : undefined,
+    slug: (a as any)?.slug || undefined,
   });
 
   const timeAgo = (d: Date) => {

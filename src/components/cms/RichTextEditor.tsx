@@ -39,6 +39,16 @@ export function RichTextEditor({ value, onChange, placeholder, onAutoSave }: Ric
     };
   }, [value, onAutoSave]);
 
+  // Keep DOM as the source of truth. Only push prop value into DOM
+  // when it differs (e.g., switching articles or external load).
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const el = editorRef.current;
+    if (el.innerHTML !== value) {
+      el.innerHTML = value || '';
+    }
+  }, [value]);
+
   const execCommand = (command: string, value?: string) => {
     document.execCommand(command, false, value);
     editorRef.current?.focus();
@@ -151,14 +161,17 @@ export function RichTextEditor({ value, onChange, placeholder, onAutoSave }: Ric
         <div
           ref={editorRef}
           contentEditable
+          suppressContentEditableWarning
           onInput={handleInput}
           className="p-4 min-h-[400px] focus:outline-none prose dark:prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: value }}
           data-placeholder={placeholder}
+          dir="ltr"
           style={{
             minHeight: '400px',
             direction: 'ltr',
             unicodeBidi: 'plaintext' as any,
+            textAlign: 'left',
+            writingMode: 'horizontal-tb' as any,
           }}
         />
       )}

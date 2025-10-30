@@ -119,7 +119,13 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
       toast.error('Please fill in title and content');
       return;
     }
-    const slug = editingArticle.slug || editingArticle.title.toLowerCase().replace(/\\s+/g, '-');
+    const slug = (editingArticle.slug && editingArticle.slug.trim()) || editingArticle.title
+      .toLowerCase()
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
     const catId = categoriesByName.get((editingArticle.category || 'news').toLowerCase()) || null;
     try {
       if (isCreating) {
@@ -514,7 +520,7 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
                 </div>
 
                 <div>
-                  <Label>Article Content (WYSIWYG Editor)</Label>
+                  <Label>Article Content</Label>
                   <RichTextEditor
                     value={editingArticle.content}
                     onChange={(content) => setEditingArticle({

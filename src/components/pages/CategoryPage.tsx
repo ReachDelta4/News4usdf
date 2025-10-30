@@ -17,6 +17,7 @@ interface Article {
   timeAgo: string;
   author?: string;
   readTime?: string;
+  slug?: string;
 }
 
 interface CategoryPageProps {
@@ -51,6 +52,7 @@ export function CategoryPage({ category, isQuickRead }: CategoryPageProps) {
     timeAgo: a.publish_date ? timeAgo(new Date(a.publish_date)) : 'Just now',
     author: (a as any).users?.name || undefined,
     readTime: a.read_time ? `${a.read_time} min read` : undefined,
+    slug: (a as any).slug || undefined,
   });
 
   useEffect(() => {
@@ -150,7 +152,7 @@ export function CategoryPage({ category, isQuickRead }: CategoryPageProps) {
                   {featuredArticle ? featuredArticle.category : category.toUpperCase()}
                 </div>
                 {featuredArticle && (
-                  <Link to="/article" params={{ id: featuredArticle.id }}>
+                  <Link to={`/article/${featuredArticle.slug || featuredArticle.id}`} params={{ id: featuredArticle.id, slug: featuredArticle.slug || '' }}>
                     <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white hover:text-red-600 dark:hover:text-red-400 transition-colors">
                       {featuredArticle.title}
                     </h3>

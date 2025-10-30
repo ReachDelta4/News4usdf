@@ -11,6 +11,7 @@ interface CategorySectionProps {
     imageUrl: string;
     category: string;
     timeAgo: string;
+    slug?: string;
   }>;
   isQuickRead: boolean;
 }
@@ -42,6 +43,7 @@ export function CategorySection({ title, highlightColor, articles, isQuickRead }
             category={article.category}
             timeAgo={article.timeAgo}
             isQuickRead={isQuickRead}
+            slug={article.slug}
           />
         ))}
       </div>

@@ -52,7 +52,8 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
           summary: r.summary || '',
           imageUrl: r.featured_image_url || featured.imageUrl,
           category: ((r as any).categories?.name || 'NEWS').toUpperCase(),
-          timeAgo: r.publish_date ? new Date(r.publish_date).toLocaleDateString() : 'Recently'
+          timeAgo: r.publish_date ? new Date(r.publish_date).toLocaleDateString() : 'Recently',
+          slug: (r as any)?.slug || undefined,
         })));
       } catch (e) {
         console.error(e);
@@ -135,6 +136,7 @@ export function HeroSection({ isQuickRead }: HeroSectionProps) {
               timeAgo={story.timeAgo}
               size="small"
               isQuickRead={isQuickRead}
+              slug={story.slug}
             />
           ))}
         </div>

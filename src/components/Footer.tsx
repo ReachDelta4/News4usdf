@@ -72,7 +72,7 @@ export function Footer() {
             <ul className="space-y-2 text-sm">
               {footerLinks.map((link) => (
                 <li key={link}>
-                  <a href="#" className="text-gray-300 hover:text-red-400 transition-colors">{link}</a>
+                  <a href="#" onClick={(e) => e.preventDefault()} className="text-gray-300 hover:text-red-400 transition-colors">{link}</a>
                 </li>
               ))}
             </ul>
@@ -84,7 +84,7 @@ export function Footer() {
             <ul className="space-y-3 mb-6">
               {editorsPicks.map((article, index) => (
                 <li key={index}>
-                  <a href="#" className="text-sm text-gray-300 hover:text-red-400 transition-colors line-clamp-2">
+                  <a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-gray-300 hover:text-red-400 transition-colors line-clamp-2">
                     {article}
                   </a>
                 </li>
@@ -93,19 +93,19 @@ export function Footer() {
             
             <h4 className="font-semibold mb-4">Follow Us</h4>
             <div className="flex space-x-4 mb-4">
-              <a href="#" className="text-gray-300 hover:text-red-400 transition-colors">
+              <a href="#" onClick={(e) => e.preventDefault()} className="text-gray-300 hover:text-red-400 transition-colors">
                 <Youtube className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-300 hover:text-red-400 transition-colors">
+              <a href="#" onClick={(e) => e.preventDefault()} className="text-gray-300 hover:text-red-400 transition-colors">
                 <Twitter className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-300 hover:text-red-400 transition-colors">
+              <a href="#" onClick={(e) => e.preventDefault()} className="text-gray-300 hover:text-red-400 transition-colors">
                 <Instagram className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-300 hover:text-red-400 transition-colors">
+              <a href="#" onClick={(e) => e.preventDefault()} className="text-gray-300 hover:text-red-400 transition-colors">
                 <Linkedin className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-300 hover:text-red-400 transition-colors">
+              <a href="#" onClick={(e) => e.preventDefault()} className="text-gray-300 hover:text-red-400 transition-colors">
                 <Facebook className="w-5 h-5" />
               </a>
             </div>

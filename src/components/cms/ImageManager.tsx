@@ -39,6 +39,7 @@ const [leaderTeam, setLeaderTeam] = useState<Array<{ name: string; role: string;
   { name: 'S. Bhavesh', role: 'Lead Developer', qualification: 'B.Tech', specialty: 'Technology & Innovation', image: '' },
 ]);
 const [pickerOpen, setPickerOpen] = useState<{ type: 'logo' | 'favicon' | 'leader' | null; index?: number }>({ type: null });
+const [leaderUploadIndex, setLeaderUploadIndex] = useState<number | null>(null);
 
 useEffect(() => {
     (async () => {
@@ -82,17 +83,6 @@ useEffect(() => {
         }
 
         setImages(mapped);
-        try {
-          const [siteLogo, fav, leaders] = await Promise.all([
-            api.settings.get<string>("site_logo_url"),
-            api.settings.get<string>("favicon_url"),
-            api.settings.get<any[]>("leadership_team"),
-          ]);
-          if (siteLogo) setLogoUrl(siteLogo);
-          if (fav) setFaviconUrl(fav);
-          if (Array.isArray(leaders) && leaders.length === 3) setLeaderTeam(leaders);
-        } catch {}
-
         try {
           const [siteLogo, fav, leaders] = await Promise.all([
             api.settings.get<string>('site_logo_url'),
@@ -195,8 +185,52 @@ useEffect(() => {
     }
   };
 
-  const handleImageUpload = (_imageData: { url: string; width: number; height: number }) => {
-    toast.info('Use the Upload Image button to select a file');
+  // For the ImageUploader modal: we already create the DB record inside that component
+  // so here we just close the uploader and optionally refresh listing later if needed
+  const handleImageUpload = (imageUrl: string) => {
+    if (imageUrl) toast.success('Image uploaded');
+    setShowUploader(false);
+  };
+
+  // Direct upload helper for logo/favicon/leadership shortcuts
+  async function uploadDirect(file: File, category: ImageItem['category']): Promise<string> {
+    const resized = await resizeImage(file, 1600);
+    const path = `${Date.now()}_${resized.name}`;
+    const { publicUrl } = await api.storage.uploadFile('media', path, resized);
+    await api.mediaFiles.create({
+      title: resized.name,
+      alt_text: `${category} image`,
+      file_url: publicUrl,
+      storage_path: path,
+      file_type: category,
+      mime_type: resized.type,
+      file_size: resized.size,
+    } as any);
+    // Update local list quickly
+    setImages(prev => [{
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+      url: publicUrl,
+      title: resized.name,
+      category,
+      uploadDate: new Date().toISOString().split('T')[0],
+      alt: `${category} image`,
+    }, ...prev]);
+    return publicUrl;
+  }
+
+  // Hidden inputs for direct uploads (Logo, Favicon, Leadership)
+  // Using document.getElementById to trigger to avoid ref patch churn above
+  const onLogoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { const url = await uploadDirect(f, 'logo'); setLogoUrl(url); toast.success('Logo uploaded'); } catch (err) { console.error(err); toast.error('Upload failed'); } finally { e.currentTarget.value=''; }
+  };
+  const onFaviconFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { const url = await uploadDirect(f, 'logo'); setFaviconUrl(url); toast.success('Favicon uploaded'); } catch (err) { console.error(err); toast.error('Upload failed'); } finally { e.currentTarget.value=''; }
+  };
+  const onLeaderFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { const url = await uploadDirect(f, 'leadership'); if (leaderUploadIndex != null) setLeaderTeam(t=> t.map((v,i)=> i===leaderUploadIndex ? { ...v, image: url } : v)); toast.success('Leader photo uploaded'); } catch (err) { console.error(err); toast.error('Upload failed'); } finally { setLeaderUploadIndex(null); e.currentTarget.value=''; }
   };
 
   const filterImagesByCategory = (category: ImageItem['category']) => {
@@ -273,18 +307,11 @@ useEffect(() => {
             <User className="w-4 h-4" />
             <span className="hidden sm:inline">Leadership</span>
           </TabsTrigger>
-          <TabsTrigger value="banner" className="flex items-center gap-2">
-            <ImageIcon className="w-4 h-4" />
-            <span className="hidden sm:inline">Banners</span>
-          </TabsTrigger>
           <TabsTrigger value="article" className="flex items-center gap-2">
-            <Newspaper className="w-4 h-4" />
+            <ImageIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Articles</span>
           </TabsTrigger>
-          <TabsTrigger value="category" className="flex items-center gap-2">
-            <Tag className="w-4 h-4" />
-            <span className="hidden sm:inline">Categories</span>
-          </TabsTrigger>
+          
           <TabsTrigger value="logo" className="flex items-center gap-2">
             <ImageIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Logo</span>
@@ -300,14 +327,58 @@ useEffect(() => {
           </div>
         </TabsContent>
 
-        {/* Leadership Images */}
+        {/* Leadership Tab */}
         <TabsContent value="leadership" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Leadership Profile Images</CardTitle>
-              <CardDescription>
-                Manage profile photos for leadership team members
-              </CardDescription>
+              <CardTitle>Leadership Team</CardTitle>
+              <CardDescription>Update photos and details for the About page</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {leaderTeam.map((m, idx) => (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
+                  <div className="md:col-span-1">
+                    <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
+                      {m.image ? (
+                        <img src={m.image} alt={m.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">No Image</div>
+                      )}
+                    </div>
+                    <div className="flex mt-2">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => { setLeaderUploadIndex(idx); (document.getElementById('leader-hidden-input') as HTMLInputElement)?.click(); }}>Upload</Button>
+                    </div>
+                  </div>
+                  <div className="md:col-span-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label>Name</Label>
+                      <Input value={m.name} onChange={(e) => setLeaderTeam(t => t.map((v,i)=> i===idx ? { ...v, name: e.target.value } : v))} />
+                    </div>
+                    <div>
+                      <Label>Role</Label>
+                      <Input value={m.role} onChange={(e) => setLeaderTeam(t => t.map((v,i)=> i===idx ? { ...v, role: e.target.value } : v))} />
+                    </div>
+                    <div>
+                      <Label>Qualification</Label>
+                      <Input value={m.qualification} onChange={(e) => setLeaderTeam(t => t.map((v,i)=> i===idx ? { ...v, qualification: e.target.value } : v))} />
+                    </div>
+                    <div>
+                      <Label>Specialty</Label>
+                      <Input value={m.specialty} onChange={(e) => setLeaderTeam(t => t.map((v,i)=> i===idx ? { ...v, specialty: e.target.value } : v))} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-end">
+                <Button className="bg-red-600 hover:bg-red-700" onClick={async ()=>{ await api.settings.upsert('leadership_team', leaderTeam); toast.success('Leadership updated'); }}>Save Changes</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Leadership Images</CardTitle>
+              <CardDescription>Manage profile photos (optional)</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -319,24 +390,7 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        {/* Banner Images */}
-        <TabsContent value="banner" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Homepage Banners</CardTitle>
-              <CardDescription>
-                Manage hero section and promotional banners
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filterImagesByCategory('banner').map(image => (
-                  <ImageCard key={image.id} image={image} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Banners tab removed */}
 
         {/* Article Images */}
         <TabsContent value="article" className="space-y-4">
@@ -357,24 +411,7 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        {/* Category Images */}
-        <TabsContent value="category" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Category Cover Images</CardTitle>
-              <CardDescription>
-                Manage background images for category sections
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filterImagesByCategory('category').map(image => (
-                  <ImageCard key={image.id} image={image} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Categories tab removed */}
 
         {/* Logo Management */}
                 <TabsContent value="logo" className="space-y-4">
@@ -390,6 +427,7 @@ useEffect(() => {
                   <div className="flex items-center gap-2 mt-1">
                     <Input value={logoUrl} onChange={(e)=>setLogoUrl(e.target.value)} placeholder="https://..." />
                     <Button variant="outline" onClick={()=> setPickerOpen({ type: 'logo' })}>Browse</Button>
+                    <Button variant="outline" onClick={()=> (document.getElementById('logo-hidden-input') as HTMLInputElement)?.click()}>Upload</Button>
                   </div>
                   {logoUrl && <img src={logoUrl} alt="Logo preview" className="h-12 mt-2 object-contain" />}
                 </div>
@@ -398,6 +436,7 @@ useEffect(() => {
                   <div className="flex items-center gap-2 mt-1">
                     <Input value={faviconUrl} onChange={(e)=>setFaviconUrl(e.target.value)} placeholder="https://..." />
                     <Button variant="outline" onClick={()=> setPickerOpen({ type: 'favicon' })}>Browse</Button>
+                    <Button variant="outline" onClick={()=> (document.getElementById('favicon-hidden-input') as HTMLInputElement)?.click()}>Upload</Button>
                   </div>
                   {faviconUrl && <img src={faviconUrl} alt="Favicon preview" className="h-10 mt-2 object-contain" />}
                 </div>
@@ -420,6 +459,37 @@ useEffect(() => {
           </Card>
         </TabsContent>
       </Tabs>
+      <input id="logo-hidden-input" type="file" accept="image/*" className="hidden" onChange={onLogoFile} />
+      <input id="favicon-hidden-input" type="file" accept="image/*" className="hidden" onChange={onFaviconFile} />
+      <input id="leader-hidden-input" type="file" accept="image/*" className="hidden" onChange={onLeaderFile} />
+      {pickerOpen.type && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-3xl max-h-[80vh] overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Select Image</CardTitle>
+                <Button variant="ghost" size="sm" onClick={()=> setPickerOpen({ type: null })}><X className="w-4 h-4" /></Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {images.filter(img => (
+                  pickerOpen.type === 'leader' ? img.category === 'leadership' : img.category === 'logo'
+                )).map(img => (
+                  <button key={img.id} onClick={()=>{
+                    if (pickerOpen.type === 'logo') setLogoUrl(img.url);
+                    else if (pickerOpen.type === 'favicon') setFaviconUrl(img.url);
+                    else if (pickerOpen.type === 'leader' && typeof pickerOpen.index === 'number') setLeaderTeam(t=> t.map((v,i)=> i===pickerOpen.index ? { ...v, image: img.url } : v));
+                    setPickerOpen({ type: null });
+                  }} className="border rounded overflow-hidden hover:ring-2 ring-red-500">
+                    <img src={img.url} alt={img.title} className="w-full h-24 object-cover" />
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Edit Image Dialog */}
       {isEditing && selectedImage && (
@@ -526,7 +596,7 @@ useEffect(() => {
                 </select>
               </div>
 
-              <ImageUploader onImageUpload={handleImageUpload} />
+              <ImageUploader onImageSelect={handleImageUpload} />
             </CardContent>
           </Card>
         </div>
@@ -534,6 +604,7 @@ useEffect(() => {
     </div>
   );
 }
+
 
 
 

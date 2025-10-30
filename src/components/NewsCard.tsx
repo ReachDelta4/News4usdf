@@ -13,9 +13,10 @@ interface NewsCardProps {
   timeAgo: string;
   size?: 'small' | 'medium' | 'large';
   isQuickRead?: boolean;
+  slug?: string;
 }
 
-export function NewsCard({ id, title, summary, imageUrl, category, timeAgo, size = 'medium', isQuickRead }: NewsCardProps) {
+export function NewsCard({ id, title, summary, imageUrl, category, timeAgo, size = 'medium', isQuickRead, slug }: NewsCardProps) {
   const { navigate } = useRouter();
   const sizeClasses = {
     small: 'h-32',
@@ -32,7 +33,8 @@ export function NewsCard({ id, title, summary, imageUrl, category, timeAgo, size
   const handleNavigate = (e: React.MouseEvent | React.KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
     if (target && target.closest('button, a, [data-interactive], [role="button"]')) return;
-    navigate('/article', { id });
+    const path = `/article/${slug || id}`;
+    navigate(path, { id, slug: slug || '' });
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -94,6 +96,7 @@ export function NewsCard({ id, title, summary, imageUrl, category, timeAgo, size
         {/* Social Share Section */}
         <ArticleShare 
           articleTitle={title}
+          articleUrl={`/article/${slug || id}`}
           className="mt-3"
         />
       </div>

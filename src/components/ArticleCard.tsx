@@ -12,6 +12,7 @@ interface Article {
   timeAgo: string;
   author?: string;
   readTime?: string;
+  slug?: string;
 }
 
 interface ArticleCardProps {
@@ -43,7 +44,8 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
   const handleNavigate = (e: React.MouseEvent | React.KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
     if (target && target.closest('button, a, [data-interactive], [role="button"]')) return;
-    navigate('/article', { id: article.id });
+    const path = `/article/${article.slug || article.id}`;
+    navigate(path, { id: article.id, slug: article.slug || '' });
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -79,7 +81,7 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
                 {article.category}
               </div>
               <SocialShare 
-                url={`/article/${article.id}`}
+                url={`/article/${article.slug || article.id}`}
                 title={article.title}
                 variant="compact"
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
@@ -152,7 +154,7 @@ export function ArticleCard({ article, isQuickRead = false, variant = 'card', cl
         </div>
         <div className="absolute top-3 right-3">
           <SocialShare 
-            url={`/article/${article.id}`}
+            url={`/article/${article.slug || article.id}`}
             title={article.title}
             variant="compact"
             className="opacity-0 group-hover:opacity-100 transition-opacity"

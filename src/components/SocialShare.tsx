@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Button } from "./ui/button";
 import { Share2, Facebook, Twitter, Linkedin, MessageCircle, Copy, Check } from 'lucide-react';
 import { toast } from "sonner";
@@ -23,7 +23,16 @@ export function SocialShare({
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const encodedUrl = encodeURIComponent(url);
+  // Ensure absolute URL for sharing/copying
+  const effectiveUrl = useMemo(() => {
+    if (typeof window === 'undefined') return url;
+    try {
+      if (url && url.startsWith('/')) return window.location.origin + url;
+      return url;
+    } catch { return url; }
+  }, [url]);
+
+  const encodedUrl = encodeURIComponent(effectiveUrl);
   const encodedTitle = encodeURIComponent(title);
   const encodedDescription = encodeURIComponent(description);
 
@@ -41,7 +50,7 @@ export function SocialShare({
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(effectiveUrl);
       setCopied(true);
       toast.success("Link copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
