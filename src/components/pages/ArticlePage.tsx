@@ -49,7 +49,9 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
     try {
       const path = window.location?.pathname || '';
       const parts = path.split('/').filter(Boolean);
-      if (parts[0] === 'article' && parts[1]) return parts[1];
+      if (parts[0] === 'article' && parts[1]) {
+        try { return decodeURIComponent(parts[1]); } catch { return parts[1]; }
+      }
       return '';
     } catch { return ''; }
   }, []);

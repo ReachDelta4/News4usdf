@@ -119,19 +119,42 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
       toast.error('Please fill in title and content');
       return;
     }
-    const slug = (editingArticle.slug && editingArticle.slug.trim()) || editingArticle.title
+    // Generate base slug (shortened) and ensure uniqueness
+    let baseSlug = (editingArticle.slug && editingArticle.slug.trim()) || editingArticle.title
       .toLowerCase()
       .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-+|-+$/g, '');
+    // Shorten: keep first 6 tokens and 60 chars, trim hyphens
+    const tokens = baseSlug.split('-').filter(Boolean).slice(0, 6);
+    baseSlug = tokens.join('-').slice(0, 60).replace(/^-+|-+$/g, '');
+    const ensureUniqueSlug = async (candidate: string, excludeId?: number): Promise<string> => {
+      const root = candidate || 'article';
+      let trySlug = root;
+      let n = 1;
+      // Avoid tight loop with a hard cap for safety
+      for (let i = 0; i < 50; i++) {
+        try {
+          const existing = await api.articles.getBySlug(trySlug);
+          if (!existing || (excludeId && existing.id === excludeId)) return trySlug;
+        } catch {
+          // If the lookup errors (e.g., due to RLS), be conservative and return current candidate
+          return trySlug;
+        }
+        n += 1;
+        trySlug = `${root}-${n}`;
+      }
+      return `${root}-${Date.now()}`; // Fallback safeguard
+    };
     const catId = categoriesByName.get((editingArticle.category || 'news').toLowerCase()) || null;
     try {
       if (isCreating) {
+        const uniqueSlug = await ensureUniqueSlug(baseSlug);
         const created = await api.articles.create({
           title: editingArticle.title,
-          slug,
+          slug: uniqueSlug,
           summary: editingArticle.summary,
           content: editingArticle.content,
           category_id: catId as any,
@@ -140,13 +163,14 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
           featured_image_url: editingArticle.featuredImage as any,
           publish_date: editingArticle.status === 'published' ? new Date().toISOString() : null,
         } as any, editingArticle.tags || []);
-        setArticles(prev => [...prev, { ...editingArticle, id: String(created.id), slug }]);
+        setArticles(prev => [...prev, { ...editingArticle, id: String(created.id), slug: uniqueSlug }]);
         toast.success('Article created successfully');
       } else {
         const idNum = parseInt(editingArticle.id, 10);
+        const uniqueSlug = await ensureUniqueSlug(baseSlug, idNum);
         const updated = await api.articles.update(idNum, {
           title: editingArticle.title,
-          slug,
+          slug: uniqueSlug,
           summary: editingArticle.summary,
           content: editingArticle.content,
           category_id: catId as any,
@@ -155,7 +179,7 @@ export function ArticlesPanel({ currentUser }: ArticlesPanelProps) {
           featured_image_url: editingArticle.featuredImage as any,
           publish_date: editingArticle.status === 'published' ? (editingArticle.publishDate ? new Date(editingArticle.publishDate).toISOString() : new Date().toISOString()) : null,
         } as any, editingArticle.tags || []);
-        setArticles(prev => prev.map(a => a.id === editingArticle.id ? { ...editingArticle, slug } : a));
+        setArticles(prev => prev.map(a => a.id === editingArticle.id ? { ...editingArticle, slug: uniqueSlug } : a));
         toast.success('Article updated successfully');
       }
     } catch (e) {

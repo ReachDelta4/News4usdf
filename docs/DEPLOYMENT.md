@@ -20,3 +20,34 @@ Next Steps
 - Regenerate `src/lib/database.types.ts` from the live DB and update `src/lib/api.ts` accordingly.
 - Replace static demo data in pages with `api` reads (articles, categories, e-papers, media).
 - Swap Admin login (localStorage) for Supabase Auth and enforce admin/editor roles via `profiles.role`.
+
+Single-Page App (SPA) routing on production
+- The app uses client-side routing (custom Router). Direct requests to deep links like `/article/<slug>` must be served `index.html` so the client can render the route.
+- Without this, users see a server 404 when they open shared URLs directly.
+
+Configure your host to fallback to `index.html` for unknown routes:
+- NGINX
+  - Inside your `server {}` block, add:
+    - `location / { try_files $uri /index.html; }`
+  - If you serve assets from `/assets` or `/dist`, ensure they’re not rewritten.
+- Apache (with .htaccess)
+  - Enable `AllowOverride All` and add to your web root `.htaccess`:
+    - `RewriteEngine On`
+    - `RewriteBase /`
+    - `RewriteRule ^index\.html$ - [L]`
+    - `RewriteCond %{REQUEST_FILENAME} !-f`
+    - `RewriteCond %{REQUEST_FILENAME} !-d`
+    - `RewriteRule . /index.html [L]`
+- Netlify
+  - Create a file `public/_redirects` with:
+    - `/*   /index.html   200`
+- Vercel
+  - Add `vercel.json` with a rewrite from `/(.*)` to `/index.html` for SPA.
+- Cloudflare Pages
+  - Set a catch-all route rewrite to `/index.html`.
+
+Important: If you use a CDN or proxy in front of your origin (e.g., Cloudflare), apply the same rewrite/fallback at the edge or forward unmatched paths to your origin and let the origin serve `index.html`.
+
+Canonical article URLs
+- The app canonicalizes the URL on article load to `/article/<slug>`.
+- Old slugs are preserved in the database (`article_slug_redirects`), and the client API resolves those to the current article. Keep your server SPA fallback enabled so these work on first load.

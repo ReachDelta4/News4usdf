@@ -8,7 +8,7 @@ interface SocialShareProps {
   title?: string;
   description?: string;
   className?: string;
-  variant?: 'floating' | 'inline' | 'compact';
+  variant?: 'floating' | 'inline' | 'compact' | 'button';
   showLabels?: boolean;
 }
 
@@ -23,20 +23,33 @@ export function SocialShare({
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Ensure absolute URL for sharing/copying (preserves base/subpath)
-  const effectiveUrl = useMemo(() => {
-    if (typeof window === 'undefined') return url;
+  // Build both a raw (human-friendly) absolute URL and an encoded one for share query params
+  const rawAbsoluteUrl = useMemo(() => {
+    if (typeof window === 'undefined') return url || '';
     try {
-      // new URL(relativeOrAbsolute, base) reliably resolves both absolute and relative paths
-      const base = window.location.href;
-      const resolved = new URL(url || base, base).toString();
-      return resolved;
+      const origin = window.location.origin || '';
+      if (!url) return decodeURI(window.location.href);
+      if (/^https?:\/\//i.test(url)) return decodeURI(url);
+      const path = url.startsWith('/') ? url : `/${url}`;
+      // Return human-readable Unicode path without forcing percent-encoding
+      return `${origin}${path}`;
     } catch {
       return url || '';
     }
   }, [url]);
 
-  const encodedUrl = encodeURIComponent(effectiveUrl);
+  const encodedUrl = useMemo(() => {
+    try {
+      // Ensure a properly encoded absolute URL for embedding in share query params
+      const absolute = typeof window !== 'undefined'
+        ? (/^https?:\/\//i.test(rawAbsoluteUrl) ? rawAbsoluteUrl : `${window.location.origin}${rawAbsoluteUrl}`)
+        : rawAbsoluteUrl;
+      const u = new URL(absolute).toString();
+      return encodeURIComponent(u);
+    } catch {
+      return encodeURIComponent(rawAbsoluteUrl);
+    }
+  }, [rawAbsoluteUrl]);
   const encodedTitle = encodeURIComponent(title);
   const encodedDescription = encodeURIComponent(description);
 
@@ -54,7 +67,7 @@ export function SocialShare({
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(effectiveUrl);
+      await navigator.clipboard.writeText(rawAbsoluteUrl);
       setCopied(true);
       toast.success("Link copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
@@ -96,7 +109,7 @@ export function SocialShare({
     }
   ];
 
-  if (variant === 'compact') {
+  if (variant === 'compact' || variant === 'button') {
     return (
       <div className={`relative ${className}`}>
         <Button

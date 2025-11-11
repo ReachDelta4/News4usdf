@@ -60,6 +60,7 @@ export const api = {
     },
 
     async getBySlug(slug: string) {
+      // First try direct slug match
       const { data, error } = await supabase
         .from('articles')
         .select(`
@@ -72,7 +73,29 @@ export const api = {
         .maybeSingle();
 
       if (error) throw error;
-      return data;
+      if (data) return data;
+
+      // Fallback: lookup redirect mapping (old_slug -> article_id)
+      const { data: redir, error: rErr } = await supabase
+        .from('article_slug_redirects' as any)
+        .select('article_id')
+        .eq('old_slug', slug)
+        .maybeSingle();
+      if (rErr) return null as any;
+      if (!redir?.article_id) return null as any;
+
+      const { data: byId, error: idErr } = await supabase
+        .from('articles')
+        .select(`
+          *,
+          categories (id, name, slug, color),
+          users (id, name, email),
+          article_tags ( tags ( name ) )
+        `)
+        .eq('id', redir.article_id)
+        .maybeSingle();
+      if (idErr) return null as any;
+      return byId;
     },
 
     async getById(id: number) {
