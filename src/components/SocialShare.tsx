@@ -23,13 +23,17 @@ export function SocialShare({
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Ensure absolute URL for sharing/copying
+  // Ensure absolute URL for sharing/copying (preserves base/subpath)
   const effectiveUrl = useMemo(() => {
     if (typeof window === 'undefined') return url;
     try {
-      if (url && url.startsWith('/')) return window.location.origin + url;
-      return url;
-    } catch { return url; }
+      // new URL(relativeOrAbsolute, base) reliably resolves both absolute and relative paths
+      const base = window.location.href;
+      const resolved = new URL(url || base, base).toString();
+      return resolved;
+    } catch {
+      return url || '';
+    }
   }, [url]);
 
   const encodedUrl = encodeURIComponent(effectiveUrl);

@@ -43,6 +43,7 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
   const [loading, setLoading] = useState(true);
   const [article, setArticle] = useState<any | null>(null);
   const [related, setRelated] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const pathSlugOrId = useMemo(() => {
     try {
@@ -76,6 +77,12 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
         } else if (idNum != null) {
           row = await api.articles.getById(idNum);
         }
+        // If nothing found, route to 404 to avoid showing placeholders
+        if (!row) {
+          try { navigate('/404'); } catch {}
+          setArticle(null);
+          return;
+        }
         setArticle(row);
         if (row?.category_id) {
           const list = await api.articles.getAll({ status: 'published', category_id: row.category_id, limit: 6 });
@@ -95,6 +102,8 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
         }
       } catch (e) {
         console.error(e);
+        setError('failed');
+        try { navigate('/404'); } catch {}
       } finally {
         setLoading(false);
       }
@@ -107,6 +116,23 @@ export function ArticlePage({ isDarkMode, toggleDarkMode }: ArticlePageProps) {
     large: 'text-lg',
     xl: 'text-xl'
   } as const;
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-12 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-red-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (error || !article) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Article not found</h1>
+        <p className="text-gray-600 dark:text-gray-300 mt-2">The link may be invalid or the article is not published.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
